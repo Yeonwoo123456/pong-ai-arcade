@@ -1,10 +1,9 @@
 
+
 /* =====================================================
-   CLASSIC PONG AI - ORIGINAL ARCADE DESIGN
+   CLASSIC PONG AI
    Black / White / Green
 ===================================================== */
-
-/* ---------- GLOBAL ---------- */
 
 :root {
     --bg: #050505;
@@ -13,6 +12,7 @@
     --green: #c7ff4d;
     --gray: #888888;
     --border: #292929;
+    --danger: #ff6666;
 }
 
 * {
@@ -38,11 +38,22 @@ body {
 button {
     font-family: inherit;
     cursor: pointer;
+    border-radius: 0;
 }
 
-/* ---------- SCREEN VISIBILITY ---------- */
+.hidden,
+#menuScreen.hidden,
+#gameScreen.hidden,
+#statsScreen.hidden,
+#pauseOverlay.hidden,
+#chartTooltip.hidden {
+    display: none !important;
+}
 
-/* 기본 화면 */
+
+/* =====================================================
+   SCREEN LAYOUT
+===================================================== */
 
 .screen {
     width: 100%;
@@ -50,17 +61,10 @@ button {
     background: var(--bg);
 }
 
-/* 화면 숨김 우선순위 문제 방지 */
 
-.hidden,
-#menuScreen.hidden,
-#gameScreen.hidden,
-#statsScreen.hidden,
-#pauseOverlay.hidden {
-    display: none !important;
-}
-
-/* ---------- MAIN MENU ---------- */
+/* =====================================================
+   MAIN MENU
+===================================================== */
 
 #menuScreen {
     display: flex;
@@ -77,8 +81,6 @@ button {
     flex-direction: column;
     align-items: center;
 }
-
-/* Logo */
 
 .logo {
     margin-bottom: 55px;
@@ -112,14 +114,17 @@ button {
     margin-top: 20px;
 }
 
-/* Menu Buttons */
-
 .menu-buttons {
     width: 280px;
     display: flex;
     flex-direction: column;
     gap: 13px;
 }
+
+
+/* =====================================================
+   BUTTONS
+===================================================== */
 
 .main-btn,
 .secondary-btn,
@@ -129,14 +134,11 @@ button {
     font-size: 13px;
     font-weight: bold;
     letter-spacing: 2px;
-    border-radius: 0;
     transition: background 0.15s, color 0.15s;
 }
 
-/* PLAY */
-
 .main-btn {
-    color: #000000;
+    color: #000;
     background: var(--green);
     border: 1px solid var(--green);
 }
@@ -146,12 +148,10 @@ button {
     border-color: var(--white);
 }
 
-/* SECONDARY */
-
 .secondary-btn {
     color: var(--white);
     background: transparent;
-    border: 1px solid #555555;
+    border: 1px solid #555;
 }
 
 .secondary-btn:hover {
@@ -159,10 +159,8 @@ button {
     border-color: var(--green);
 }
 
-/* DANGER */
-
 .danger-btn {
-    color: #ff6666;
+    color: var(--danger);
     background: transparent;
     border: 1px solid #733333;
 }
@@ -172,7 +170,10 @@ button {
     background: #8b2929;
 }
 
-/* Model Status */
+
+/* =====================================================
+   MODEL STATUS
+===================================================== */
 
 .model-information {
     display: flex;
@@ -193,14 +194,12 @@ button {
     border-radius: 50%;
 }
 
-/* Controls */
-
 .controls-information {
     display: flex;
     flex-direction: column;
     gap: 7px;
     margin-top: 55px;
-    color: #777777;
+    color: #777;
     font-size: 10px;
     letter-spacing: 1px;
 }
@@ -211,7 +210,10 @@ button {
     font-weight: bold;
 }
 
-/* ---------- GAME SCREEN ---------- */
+
+/* =====================================================
+   GAME SCREEN
+===================================================== */
 
 #gameScreen {
     display: flex;
@@ -220,8 +222,6 @@ button {
     justify-content: center;
     padding: 20px;
 }
-
-/* Header */
 
 .game-header {
     width: min(100%, 900px);
@@ -266,8 +266,6 @@ button {
     font-size: 16px;
 }
 
-/* Canvas */
-
 .arena-container {
     width: 100%;
     display: flex;
@@ -283,10 +281,8 @@ button {
     height: auto;
     aspect-ratio: 900 / 620;
     background: #050505;
-    border: 1px solid #333333;
+    border: 1px solid #333;
 }
-
-/* Game Buttons */
 
 .game-controls {
     display: flex;
@@ -302,7 +298,10 @@ button {
     font-size: 10px;
 }
 
-/* ---------- PAUSE OVERLAY ---------- */
+
+/* =====================================================
+   PAUSE OVERLAY
+===================================================== */
 
 #pauseOverlay {
     position: fixed;
@@ -322,7 +321,7 @@ button {
     padding: 35px;
     text-align: center;
     background: #101010;
-    border: 1px solid #444444;
+    border: 1px solid #444;
 }
 
 .overlay-content h2 {
@@ -337,7 +336,10 @@ button {
     margin-bottom: 15px;
 }
 
-/* ---------- STATISTICS ---------- */
+
+/* =====================================================
+   STATISTICS
+===================================================== */
 
 #statsScreen {
     display: flex;
@@ -350,8 +352,6 @@ button {
     width: 100%;
     max-width: 950px;
 }
-
-/* Header */
 
 .stats-header {
     display: flex;
@@ -368,8 +368,6 @@ button {
 .stats-header button {
     min-width: 100px;
 }
-
-/* Cards */
 
 .stats-grid {
     display: grid;
@@ -400,9 +398,13 @@ button {
     font-size: 25px;
 }
 
-/* Chart */
+
+/* =====================================================
+   CHART
+===================================================== */
 
 .chart-container {
+    position: relative;
     padding: 22px;
     margin-bottom: 20px;
     background: var(--panel);
@@ -440,16 +442,57 @@ button {
     width: 100%;
     height: auto;
     background: #080808;
+    cursor: default;
+}
+
+
+/* =====================================================
+   CHART TOOLTIP
+===================================================== */
+
+.chart-tooltip {
+    position: absolute;
+    z-index: 20;
+    min-width: 175px;
+    max-width: 230px;
+    padding: 12px 15px;
+
+    background: #151515;
+    border: 1px solid var(--green);
+
+    color: var(--white);
+    font-family: "Courier New", monospace;
+    font-size: 12px;
+    line-height: 1.8;
+
+    pointer-events: none;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.6);
+}
+
+.chart-tooltip .tooltip-title {
+    color: var(--green);
+    font-weight: bold;
+    margin-bottom: 5px;
+}
+
+.chart-tooltip .tooltip-player {
+    color: var(--white);
+}
+
+.chart-tooltip .tooltip-ai {
+    color: var(--green);
 }
 
 #resetStatsBtn {
     width: 100%;
 }
 
-/* ---------- RESPONSIVE ---------- */
+
+/* =====================================================
+   RESPONSIVE
+===================================================== */
 
 @media (max-width: 700px) {
-
     #menuScreen {
         padding: 20px;
     }
@@ -505,6 +548,15 @@ button {
 
     .stat-card strong {
         font-size: 20px;
+    }
+
+    .chart-container {
+        padding: 12px;
+    }
+
+    .chart-tooltip {
+        font-size: 10px;
+        min-width: 150px;
     }
 }
 
