@@ -301,3 +301,37 @@ select {
         font-size: 8px;
     }
 }
+
+/* GAME SCREEN SIZE */
+
+#gameScreen {
+    width: 100%;
+    min-height: 100vh;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+}
+
+#gameScreen.hidden {
+    display: none !important;
+}
+
+#arena {
+    display: block;
+    width: min(80vw, 116.13vh);
+    max-width: 900px;
+    max-height: 80vh;
+    height: auto;
+    aspect-ratio: 900 / 620;
+    object-fit: contain;
+    margin: 0 auto;
+}
+
+html,
+body {
+    max-width: 100%;
+    overflow-x: hidden;
+}
