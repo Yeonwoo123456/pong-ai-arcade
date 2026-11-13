@@ -2,11 +2,10 @@
 "use strict";
 
 /* =========================================================
-   PONG AI - FINAL STABLE VERSION
-   Initial prediction error: 100% (large offset)
-   AI tracking: heavily reduced
-   Growth: Every completed point
-   TensorFlow.js: Optional
+   PONG AI - FINAL VERSION
+   Equal player/AI paddle dimensions and speed.
+   AI difficulty is controlled by prediction quality.
+   TensorFlow.js is optional.
    ========================================================= */
 
 const CONFIG = {
@@ -20,17 +19,14 @@ const CONFIG = {
     playerWidth: 125,
     paddleHeight: 13,
 
-    aiBaseSpeed: 1.3,
-    aiMaxSpeed: 4.2,
+    initialErrorRate: 0.90,
+    finalErrorRate: 0.12,
 
-    aiBaseWidth: 42,
-    aiMaxWidth: 75,
+    initialErrorRange: 420,
+    finalErrorRange: 45,
 
-    initialErrorRate: 1.00,
-    finalErrorRate: 0.15,
-
-    initialErrorRange: 480,
-    finalErrorRange: 70,
+    initialReactionFrames: 18,
+    finalReactionFrames: 5,
 
     maxLevel: 30,
 
@@ -54,12 +50,17 @@ const STORAGE = {
     attempts: "pong-ai-attempts-v9"
 };
 
+/* =========================================================
+   DOM
+   ========================================================= */
+
 const $ = id => document.getElementById(id);
 
 const ui = {
     menu: $("menuScreen"),
     game: $("gameScreen"),
     stats: $("statsScreen"),
+
     arena: $("arena"),
 
     play: $("playBtn"),
@@ -99,6 +100,10 @@ const ui = {
 const canvas = ui.arena;
 const ctx = canvas ? canvas.getContext("2d") : null;
 
+/* =========================================================
+   SAFE STORAGE
+   ========================================================= */
+
 function storageGet(key, fallback = null) {
     try {
         const value = localStorage.getItem(key);
@@ -123,6 +128,10 @@ function loadNumber(key, fallback) {
     const value = Number(storageGet(key, fallback));
     return Number.isFinite(value) ? value : fallback;
 }
+
+/* =========================================================
+   GAME STATE
+   ========================================================= */
 
 let running = false;
 let paused = false;
@@ -171,7 +180,7 @@ let player = {
 let ai = {
     x: CONFIG.width / 2,
     y: 35,
-    width: CONFIG.aiBaseWidth,
+    width: CONFIG.playerWidth,
     height: CONFIG.paddleHeight
 };
 
@@ -189,6 +198,10 @@ let servePredictionOffset = 0;
 let lastAIState = null;
 let lastAIAction = 1;
 let pointFinished = false;
+
+/* =========================================================
+   AUDIO
+   ========================================================= */
 
 let audioContext = null;
 
@@ -236,9 +249,14 @@ function playSound(frequency = 440, duration = 0.06) {
     }
 }
 
+/* =========================================================
+   STATISTICS STORAGE
+   ========================================================= */
+
 function loadStatistics() {
     try {
         const saved = storageGet(STORAGE.stats);
+
         if (!saved) return;
 
         const parsed = JSON.parse(saved);
@@ -262,6 +280,10 @@ function saveStatistics() {
     );
 }
 
+/* =========================================================
+   AI PROGRESSION
+   ========================================================= */
+
 function updateAISkill() {
     aiLevel = Math.min(
         CONFIG.maxLevel,
@@ -275,15 +297,13 @@ function updateAISkill() {
 }
 
 function getAISpeed() {
-    return CONFIG.aiBaseSpeed +
-        (CONFIG.aiMaxSpeed - CONFIG.aiBaseSpeed) *
-        aiSkill;
+    // Exactly the same movement speed as the player.
+    return CONFIG.playerSpeed;
 }
 
 function getAIWidth() {
-    return CONFIG.aiBaseWidth +
-        (CONFIG.aiMaxWidth - CONFIG.aiBaseWidth) *
-        aiSkill;
+    // Exactly the same paddle width as the player.
+    return CONFIG.playerWidth;
 }
 
 function getAIErrorRate() {
@@ -313,6 +333,10 @@ function advanceAISkill() {
 
     updateUI();
 }
+
+/* =========================================================
+   REPLAY MEMORY
+   ========================================================= */
 
 class ReplayMemory {
     constructor(capacity) {
@@ -351,6 +375,10 @@ class ReplayMemory {
         return this.data.length;
     }
 }
+
+/* =========================================================
+   OPTIONAL DQN AGENT
+   ========================================================= */
 
 class DQNAgent {
     constructor(tf) {
@@ -597,6 +625,10 @@ class DQNAgent {
     }
 }
 
+/* =========================================================
+   STATE AND PREDICTION
+   ========================================================= */
+
 function getState() {
     return [
         ball.x / CONFIG.width,
@@ -608,6 +640,8 @@ function getState() {
 }
 
 function predictBallXAtY(targetY) {
+    // AI is at the top.
+    // Negative vy means the ball is approaching AI.
     if (ball.vy >= 0) return ball.x;
 
     const time = (targetY - ball.y) / ball.vy;
@@ -633,14 +667,21 @@ function predictBallXAtY(targetY) {
     return left + relative;
 }
 
-function moveAI() {
-    ai.width = getAIWidth();
+/* =========================================================
+   AI MOVEMENT
+   ========================================================= */
 
+function moveAI() {
+    // Match the player's paddle dimensions exactly.
+    ai.width = CONFIG.playerWidth;
+
+    // The AI updates its estimate less frequently at low levels.
     moveAI.frame = (moveAI.frame || 0) + 1;
 
-    const reactionFrames = Math.max(
-        8,
-        Math.round(18 - 10 * aiSkill)
+    const reactionFrames = Math.round(
+        CONFIG.initialReactionFrames +
+        (CONFIG.finalReactionFrames - CONFIG.initialReactionFrames) *
+        aiSkill
     );
 
     if (
@@ -648,14 +689,25 @@ function moveAI() {
         moveAI.cachedTargetX === undefined
     ) {
         if (ball.vy < 0) {
-            const prediction = predictBallXAtY(ai.y);
+            // Calculate the predicted landing point.
+            const truePrediction = predictBallXAtY(ai.y);
 
-            const errorOffset = servePredictionFails
-                ? servePredictionOffset
-                : 0;
+            // Add an error according to the current AI skill.
+            const predictionFails =
+                Math.random() < getAIErrorRate();
 
-            moveAI.cachedTargetX = prediction + errorOffset;
+            if (predictionFails) {
+                const error = (Math.random() * 2 - 1) *
+                    getAIErrorRange();
 
+                moveAI.cachedTargetX =
+                    truePrediction + error;
+            } else {
+                moveAI.cachedTargetX = truePrediction;
+            }
+
+            // Keep DQN influence small so it cannot bypass
+            // the prediction difficulty settings.
             if (agent && agent.ready) {
                 const state = getState();
                 const action = agent.chooseAction(state);
@@ -669,7 +721,9 @@ function moveAI() {
                 );
 
                 moveAI.cachedTargetX +=
-                    (action - 1) * getAISpeed() * influence;
+                    (action - 1) *
+                    CONFIG.playerSpeed *
+                    influence;
             }
         } else {
             moveAI.cachedTargetX = CONFIG.width / 2;
@@ -686,21 +740,26 @@ function moveAI() {
 
     const difference = targetX - ai.x;
 
-    const trackingStrength = 0.08 + 0.08 * aiSkill;
-    const maxMovement = getAISpeed() * 0.35;
-
+    // Same physical speed limit as the player.
+    // Misses result from inaccurate predictions and delayed updates.
     const movement = Math.max(
-        -maxMovement,
-        Math.min(
-            maxMovement,
-            difference * trackingStrength
-        )
+        -CONFIG.playerSpeed,
+        Math.min(CONFIG.playerSpeed, difference)
     );
 
-    if (Math.abs(difference) > 8) {
+    if (Math.abs(difference) > 1) {
         ai.x += movement;
     }
+
+    ai.x = Math.max(
+        ai.width / 2,
+        Math.min(CONFIG.width - ai.width / 2, ai.x)
+    );
 }
+
+/* =========================================================
+   EXPERIENCE RECORDING
+   ========================================================= */
 
 function recordExperience(reward, done) {
     if (!agent || !agent.ready || !lastAIState) {
@@ -718,6 +777,10 @@ function recordExperience(reward, done) {
     lastAIState = null;
 }
 
+/* =========================================================
+   BALL RESET
+   ========================================================= */
+
 function resetBall() {
     ball.x = CONFIG.width / 2;
     ball.y = CONFIG.height / 2;
@@ -730,21 +793,28 @@ function resetBall() {
         (Math.random() < 0.5 ? -1 : 1) *
         CONFIG.ballSpeed;
 
+    // One prediction decision per serve.
     servePredictionFails =
         Math.random() < getAIErrorRate();
 
-    const errorDirection = Math.random() < 0.5 ? -1 : 1;
+    const errorDirection =
+        Math.random() < 0.5 ? -1 : 1;
 
     const errorMagnitude =
         getAIErrorRange() * (0.65 + Math.random() * 0.35);
 
-    servePredictionOffset = errorDirection * errorMagnitude;
+    servePredictionOffset =
+        errorDirection * errorMagnitude;
 
     lastAIState = null;
     lastAIAction = 1;
 
     moveAI.cachedTargetX = CONFIG.width / 2;
 }
+
+/* =========================================================
+   COLLISION
+   ========================================================= */
 
 function ballHitsPaddle(paddle) {
     return (
@@ -783,6 +853,10 @@ function bounceFromPaddle(paddle, isAI) {
     playSound(isAI ? 520 : 650);
 }
 
+/* =========================================================
+   POINT HANDLING
+   ========================================================= */
+
 function finishPoint(playerWon) {
     if (pointFinished) return;
 
@@ -803,8 +877,10 @@ function finishPoint(playerWon) {
         playSound(800, 0.15);
     }
 
+    // Every completed point improves AI progression.
     advanceAISkill();
 
+    // DQN learning is optional.
     if (agent && agent.ready) {
         agent.trainAfterPoint();
     }
@@ -816,9 +892,14 @@ function finishPoint(playerWon) {
     updateUI();
 }
 
+/* =========================================================
+   GAME PHYSICS
+   ========================================================= */
+
 function moveGame() {
     if (!running || paused) return;
 
+    // Player movement.
     if (keys.left) {
         player.x -= CONFIG.playerSpeed;
     }
@@ -835,11 +916,14 @@ function moveGame() {
         )
     );
 
+    // AI movement.
     moveAI();
 
+    // Ball movement.
     ball.x += ball.vx;
     ball.y += ball.vy;
 
+    // Side walls.
     if (
         ball.x - ball.radius <= 0 ||
         ball.x + ball.radius >= CONFIG.width
@@ -848,6 +932,7 @@ function moveGame() {
         playSound(350);
     }
 
+    // AI paddle at the top.
     if (ball.vy < 0 && ballHitsPaddle(ai)) {
         ball.y =
             ai.y + ai.height / 2 + ball.radius;
@@ -855,6 +940,7 @@ function moveGame() {
         bounceFromPaddle(ai, true);
     }
 
+    // Player paddle at the bottom.
     if (ball.vy > 0 && ballHitsPaddle(player)) {
         ball.y =
             player.y - player.height / 2 -
@@ -863,10 +949,12 @@ function moveGame() {
         bounceFromPaddle(player, false);
     }
 
+    // Ball passes the player.
     if (ball.y - ball.radius > CONFIG.height) {
         finishPoint(true);
     }
 
+    // Ball passes the AI.
     if (ball.y + ball.radius < 0) {
         finishPoint(false);
     }
@@ -880,6 +968,10 @@ function moveGame() {
     }
 }
 
+/* =========================================================
+   DRAWING
+   ========================================================= */
+
 function drawGame() {
     if (!ctx) return;
 
@@ -888,6 +980,7 @@ function drawGame() {
     ctx.fillStyle = "#050505";
     ctx.fillRect(0, 0, CONFIG.width, CONFIG.height);
 
+    // Center line.
     ctx.strokeStyle = "#444";
     ctx.setLineDash([10, 12]);
 
@@ -898,6 +991,7 @@ function drawGame() {
 
     ctx.setLineDash([]);
 
+    // AI paddle.
     ctx.fillStyle = "#b6ff00";
     ctx.fillRect(
         ai.x - ai.width / 2,
@@ -906,6 +1000,7 @@ function drawGame() {
         ai.height
     );
 
+    // Player paddle.
     ctx.fillStyle = "#ffffff";
     ctx.fillRect(
         player.x - player.width / 2,
@@ -914,6 +1009,7 @@ function drawGame() {
         player.height
     );
 
+    // Ball.
     ctx.fillStyle = "#ffffff";
     ctx.beginPath();
     ctx.arc(
@@ -925,6 +1021,10 @@ function drawGame() {
     );
     ctx.fill();
 }
+
+/* =========================================================
+   GAME LOOP
+   ========================================================= */
 
 function gameLoop() {
     if (!running) return;
@@ -950,6 +1050,10 @@ function gameLoop() {
 
     animationFrame = requestAnimationFrame(gameLoop);
 }
+
+/* =========================================================
+   SCREEN MANAGEMENT
+   ========================================================= */
 
 function showScreen(name) {
     if (ui.menu) {
@@ -1062,6 +1166,10 @@ async function endMatch() {
     updateUI();
 }
 
+/* =========================================================
+   UI AND STATISTICS
+   ========================================================= */
+
 function getWinRate() {
     const total =
         statistics.playerPoints +
@@ -1109,11 +1217,13 @@ function updateUI() {
     }
 
     if (ui.statMatches) {
-        ui.statMatches.textContent = statistics.matches;
+        ui.statMatches.textContent =
+            statistics.matches;
     }
 
     if (ui.statRate) {
-        ui.statRate.textContent = `${getWinRate()}%`;
+        ui.statRate.textContent =
+            `${getWinRate()}%`;
     }
 
     if (ui.statTime) {
@@ -1137,8 +1247,13 @@ function updateUI() {
     }
 }
 
+/* =========================================================
+   CHART
+   ========================================================= */
+
 function drawChart() {
     const chart = ui.chart;
+
     if (!chart) return;
 
     const chartCtx = chart.getContext("2d");
@@ -1250,6 +1365,7 @@ function setupChartHover() {
             `AI Level: ${item.aiLevel}`;
 
         ui.tooltip.style.display = "block";
+
         ui.tooltip.style.left =
             `${event.clientX - rect.left + 10}px`;
 
@@ -1261,6 +1377,10 @@ function setupChartHover() {
         ui.tooltip.style.display = "none";
     });
 }
+
+/* =========================================================
+   KEYBOARD
+   ========================================================= */
 
 document.addEventListener("keydown", event => {
     const key = event.key.toLowerCase();
@@ -1293,6 +1413,10 @@ document.addEventListener("keyup", event => {
         keys.right = false;
     }
 });
+
+/* =========================================================
+   SCOREBOARD ALIGNMENT
+   ========================================================= */
 
 function configureScoreboard() {
     const scoreboard = document.querySelector(".scoreboard");
@@ -1334,6 +1458,10 @@ function configureScoreboard() {
         });
     });
 }
+
+/* =========================================================
+   BUTTONS
+   ========================================================= */
 
 function setupButtons() {
     if (ui.play) {
@@ -1398,6 +1526,10 @@ function setupButtons() {
     }
 }
 
+/* =========================================================
+   OPTIONAL TENSORFLOW INITIALIZATION
+   ========================================================= */
+
 async function initializeAI() {
     if (!window.tf) {
         console.warn("TensorFlow.js unavailable. Basic AI active.");
@@ -1445,6 +1577,10 @@ async function initializeAI() {
     }
 }
 
+/* =========================================================
+   INITIALIZATION
+   ========================================================= */
+
 async function init() {
     try {
         if (!canvas || !ctx) {
@@ -1479,6 +1615,7 @@ async function init() {
         console.log("Pong AI initialized.");
         console.log("AI attempts:", aiAttempts);
         console.log("AI level:", aiLevel);
+
         console.log(
             "Prediction error rate:",
             getAIErrorRate()
