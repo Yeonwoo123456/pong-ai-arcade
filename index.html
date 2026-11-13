@@ -1,0 +1,206 @@
+
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PONG AI - Learning Arcade</title>
+
+    <link rel="stylesheet" href="style.css">
+
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js"></script>
+</head>
+
+<body>
+
+<main class="shell">
+
+    <header class="topline">
+        <div class="brand">
+            PONG AI
+            <span class="brand-sub">LEARNING ARCADE</span>
+        </div>
+
+        <div class="top-status">
+            <span id="modelStatus">AI MODEL: LOADING</span>
+        </div>
+    </header>
+
+    <!-- 메인 메뉴 -->
+    <section id="menuScreen" class="screen menu-screen">
+
+        <div class="menu-center">
+
+            <div class="eyebrow">
+                THE CLASSIC GAME / REBUILT WITH AI
+            </div>
+
+            <h1>PONG<span>_</span></h1>
+
+            <div class="menu-stage">
+                <div class="stage-paddle stage-top"></div>
+                <div class="stage-ball"></div>
+                <div class="stage-paddle stage-bottom"></div>
+                <div class="stage-midline"></div>
+            </div>
+
+            <p class="tagline">
+                AI ON TOP · YOU ON BOTTOM
+            </p>
+
+            <div class="menu-actions">
+                <button id="playBtn" class="arcade-button primary">
+                    PLAY
+                </button>
+
+                <button id="statsBtn" class="arcade-button">
+                    STATISTICS
+                </button>
+            </div>
+
+        </div>
+
+    </section>
+
+    <!-- 게임 화면 -->
+    <section id="gameScreen" class="screen game-screen hidden">
+
+        <div class="game-toolbar">
+
+            <button id="gameMenuBtn" class="small-button">
+                MENU
+            </button>
+
+            <div class="live-metrics">
+                <span>DEFENSE <b id="liveRate">0%</b></span>
+                <span>UPDATES <b id="liveUpdates">0</b></span>
+                <span>TRAINING <b id="liveSpeed">10x</b></span>
+            </div>
+
+            <button id="pauseBtn" class="small-button">
+                PAUSE
+            </button>
+
+        </div>
+
+        <div class="arena-wrap">
+
+            <canvas
+                id="arena"
+                width="900"
+                height="620">
+            </canvas>
+
+            <div id="pauseOverlay" class="pause-overlay hidden">
+                PAUSED
+            </div>
+
+        </div>
+
+        <div class="game-controls">
+
+            <span>TOP: DQN AI</span>
+            <span>BOTTOM: PLAYER</span>
+
+            <label>
+                TRAINING SPEED
+
+                <select id="speedSelect">
+                    <option value="1">1x</option>
+                    <option value="5">5x</option>
+                    <option value="10" selected>10x</option>
+                    <option value="20">20x</option>
+                    <option value="50">50x</option>
+                </select>
+            </label>
+
+            <button id="newMatchBtn" class="small-button">
+                NEW MATCH
+            </button>
+
+            <button id="endMatchBtn" class="small-button">
+                END MATCH
+            </button>
+
+        </div>
+
+    </section>
+
+    <!-- 통계 화면 -->
+    <section id="statsScreen" class="screen stats-screen hidden">
+
+        <div class="section-head">
+
+            <button id="statsBackBtn" class="small-button">
+                BACK
+            </button>
+
+            <h2>STATISTICS</h2>
+
+        </div>
+
+        <div class="stat-grid">
+
+            <article class="stat-card">
+                <span>COMPLETED MATCHES</span>
+                <strong id="statMatches">0</strong>
+            </article>
+
+            <article class="stat-card">
+                <span>AI DEFENSE RATE</span>
+                <strong id="statRate">0%</strong>
+            </article>
+
+            <article class="stat-card">
+                <span>TOTAL PLAY TIME</span>
+                <strong id="statTime">00:00</strong>
+            </article>
+
+            <article class="stat-card">
+                <span>DQN UPDATES</span>
+                <strong id="statUpdates">0</strong>
+            </article>
+
+            <article class="stat-card">
+                <span>TRAINING EXPERIENCES</span>
+                <strong id="statExperiences">0</strong>
+            </article>
+
+            <article class="stat-card">
+                <span>EXPLORATION</span>
+                <strong id="statEpsilon">1.000</strong>
+            </article>
+
+        </div>
+
+        <article class="chart-card">
+
+            <div class="chart-title">
+                DEFENSE RATE / MATCH
+            </div>
+
+            <canvas
+                id="statsChart"
+                width="900"
+                height="270">
+            </canvas>
+
+        </article>
+
+        <button id="resetStatsBtn" class="small-button danger">
+            RESET LOCAL DATA
+        </button>
+
+    </section>
+
+    <footer class="footer">
+        <span>INSERT COIN? NO. JUST PLAY.</span>
+        <span>PONG AI ARCADE</span>
+    </footer>
+
+</main>
+
+<script src="game.js"></script>
+
+</body>
+</html>
