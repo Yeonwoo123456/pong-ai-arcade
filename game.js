@@ -2,10 +2,10 @@
 /* ==========================================
    PONG AI ARCADE
    DQN Reinforcement Learning
-   CPU Backend Version
+   Final CPU Backend Version
    ========================================== */
 
-const $ = (id) => document.getElementById(id);
+const $ = id => document.getElementById(id);
 
 const W = 900;
 const H = 620;
@@ -22,10 +22,10 @@ const MODEL_KEY = "pong-ai-dqn-v1";
 
 let screen = "menu";
 let paused = false;
-let raf = 0;
-let lastTime = 0;
 
+let raf = 0;
 let speed = 10;
+
 let agent = null;
 let envs = null;
 let live = null;
@@ -33,7 +33,10 @@ let stats = null;
 let match = null;
 
 let keys = {};
+
 let saving = false;
+let lastSavedUpdate = 0;
+let lastStatsSave = 0;
 
 
 /* ==========================================
@@ -46,6 +49,7 @@ function clamp(value, min, max) {
 
 function reflect(x) {
     const span = W - 2 * BALL_R;
+
     let q = (x - BALL_R) % (2 * span);
 
     if (q < 0) q += 2 * span;
@@ -66,6 +70,25 @@ function formatTime(seconds) {
     );
 }
 
+function setText(id, value) {
+    const element = $(id);
+
+    if (element) {
+        element.textContent = value;
+    }
+}
+
+function bind(id, event, callback) {
+    const element = $(id);
+
+    if (!element) {
+        console.warn(`HTML element not found: #${id}`);
+        return;
+    }
+
+    element.addEventListener(event, callback);
+}
+
 function defaultStats() {
     return {
         matches: 0,
@@ -77,15 +100,24 @@ function defaultStats() {
     };
 }
 
+
+/* ==========================================
+   STATISTICS STORAGE
+   ========================================== */
+
 function loadStats() {
     try {
+        const saved = JSON.parse(
+            localStorage.getItem(STORAGE_KEY) || "{}"
+        );
+
         return {
             ...defaultStats(),
-            ...JSON.parse(
-                localStorage.getItem(STORAGE_KEY) || "{}"
-            )
+            ...saved
         };
-    } catch {
+
+    } catch (error) {
+        console.warn("Statistics loading failed:", error);
         return defaultStats();
     }
 }
@@ -96,8 +128,9 @@ function saveStats() {
             STORAGE_KEY,
             JSON.stringify(stats)
         );
+
     } catch (error) {
-        console.warn("Statistics save failed:", error);
+        console.error("Statistics save failed:", error);
     }
 }
 
@@ -188,15 +221,27 @@ class DQN {
         return model;
     }
 
+    /*
+     * IMPORTANT FIX:
+     * Clone weights before setWeights.
+     * Never dispose tensors owned by the source model.
+     */
+
     copyWeights() {
-        const weights = this.model.getWeights();
+        const weights = this.model
+            .getWeights()
+            .map(weight => weight.clone());
 
-        this.target.setWeights(weights);
+        try {
+            this.target.setWeights(weights);
 
-        weights.forEach(weight => weight.dispose());
+        } finally {
+            weights.forEach(weight => weight.dispose());
+        }
     }
 
     act(state, explore = true) {
+
         if (
             explore &&
             Math.random() < this.epsilon
@@ -230,6 +275,7 @@ class DQN {
     }
 
     async learn(repeats = 1) {
+
         if (this.memory.length < this.batch) {
             return;
         }
@@ -271,6 +317,7 @@ class DQN {
             });
 
             const currentQ = this.model.predict(xs);
+
             const currentArray = currentQ.arraySync();
             const targetArray = targets.dataSync();
 
@@ -313,14 +360,23 @@ class DQN {
 
             this.updates++;
 
+            // Update target network periodically
             if (this.updates % 180 === 0) {
                 this.copyWeights();
             }
         }
     }
 
+    /*
+     * FIX:
+     * Prevent concurrent model saving.
+     * Do not dispose model weights during saving.
+     */
+
     async save() {
-        if (saving) return;
+        if (saving || !this.model) {
+            return;
+        }
 
         saving = true;
 
@@ -344,8 +400,16 @@ class DQN {
                 String(this.experiences)
             );
 
+            lastSavedUpdate = this.updates;
+
+            console.log(
+                "AI model saved successfully.",
+                "Updates:",
+                this.updates
+            );
+
         } catch (error) {
-            console.warn("Model save failed:", error);
+            console.error("Model save failed:", error);
 
         } finally {
             saving = false;
@@ -378,13 +442,25 @@ class DQN {
                 localStorage.getItem("pong-ai-experiences") || 0
             );
 
+            lastSavedUpdate = this.updates;
+
+            console.log("Saved AI model restored.");
+
             return true;
 
         } catch (error) {
-            console.log("No saved AI model found. Starting new model.");
+            console.log(
+                "No saved AI model found. Starting new model."
+            );
 
             return false;
         }
+    }
+
+    dispose() {
+        this.model.dispose();
+        this.target.dispose();
+        this.optimizer.dispose();
     }
 }
 
@@ -474,6 +550,7 @@ class ParallelWorlds {
             this.x[i] += this.vx[i];
             this.y[i] += this.vy[i];
 
+            // Side walls
             if (
                 this.x[i] < BALL_R ||
                 this.x[i] > W - BALL_R
@@ -600,11 +677,7 @@ function newMatch() {
         overlay.classList.add("hidden");
     }
 
-    const pauseButton = $("pauseBtn");
-
-    if (pauseButton) {
-        pauseButton.textContent = "Ⅱ PAUSE";
-    }
+    setText("pauseBtn", "Ⅱ PAUSE");
 
     show("game");
 }
@@ -697,7 +770,7 @@ function liveState() {
 
 function moveLive() {
 
-    // Human paddle: BOTTOM
+    // PLAYER: BOTTOM
     if (keys.ArrowLeft || keys.a || keys.A) {
         live.px -= 8;
     }
@@ -712,7 +785,7 @@ function moveLive() {
         W - PADDLE_W / 2
     );
 
-    // AI paddle: TOP
+    // AI: TOP
     const action = agent.act(
         liveState(),
         false
@@ -724,10 +797,11 @@ function moveLive() {
         W - PADDLE_W / 2
     );
 
+    // BALL MOVEMENT
     live.x += live.vx;
     live.y += live.vy;
 
-    // Side walls
+    // LEFT AND RIGHT WALLS
     if (
         live.x < BALL_R ||
         live.x > W - BALL_R
@@ -741,7 +815,7 @@ function moveLive() {
         );
     }
 
-    // AI paddle collision: TOP
+    // AI COLLISION: TOP
     if (
         live.vy < 0 &&
         live.y - BALL_R <= TOP + PADDLE_H
@@ -772,7 +846,7 @@ function moveLive() {
         }
     }
 
-    // Human paddle collision: BOTTOM
+    // PLAYER COLLISION: BOTTOM
     if (
         live.vy > 0 &&
         live.y + BALL_R >= BOTTOM
@@ -819,6 +893,7 @@ function drawArena() {
     ctx.fillStyle = "#050806";
     ctx.fillRect(0, 0, W, H);
 
+    // BORDER
     ctx.strokeStyle = "#dce8dc";
     ctx.lineWidth = 2;
 
@@ -829,7 +904,7 @@ function drawArena() {
         H - 16
     );
 
-    // Center line
+    // CENTER LINE
     ctx.setLineDash([10, 13]);
 
     ctx.strokeStyle = "#536157";
@@ -841,7 +916,7 @@ function drawArena() {
 
     ctx.setLineDash([]);
 
-    // AI paddle TOP
+    // AI PADDLE TOP
     ctx.fillStyle = "#edf4e9";
 
     ctx.fillRect(
@@ -851,7 +926,7 @@ function drawArena() {
         PADDLE_H
     );
 
-    // Player paddle BOTTOM
+    // PLAYER PADDLE BOTTOM
     ctx.fillRect(
         live.px - PADDLE_W / 2,
         BOTTOM - PADDLE_H,
@@ -859,7 +934,7 @@ function drawArena() {
         PADDLE_H
     );
 
-    // Ball
+    // BALL
     ctx.fillStyle = "#c7ff4d";
 
     ctx.fillRect(
@@ -869,7 +944,7 @@ function drawArena() {
         BALL_R * 2
     );
 
-    // Score
+    // SCORE
     ctx.fillStyle = "#c7ff4d";
     ctx.font = "bold 17px monospace";
 
@@ -879,7 +954,7 @@ function drawArena() {
         H / 2 - 15
     );
 
-    // Labels
+    // LABELS
     ctx.fillStyle = "#75e6b2";
     ctx.font = "12px monospace";
 
@@ -904,27 +979,25 @@ function drawArena() {
    ========================================== */
 
 function updateGameUI() {
-    const rateElement = $("liveRate");
-    const updatesElement = $("liveUpdates");
-    const speedElement = $("liveSpeed");
 
-    if (rateElement) {
-        rateElement.textContent =
-            match.attempts
-                ? `${(
-                    100 * match.hits / match.attempts
-                ).toFixed(1)}%`
-                : "—";
-    }
+    setText(
+        "liveRate",
+        match.attempts
+            ? `${(
+                100 * match.hits / match.attempts
+            ).toFixed(1)}%`
+            : "—"
+    );
 
-    if (updatesElement) {
-        updatesElement.textContent =
-            agent.updates.toLocaleString();
-    }
+    setText(
+        "liveUpdates",
+        agent.updates.toLocaleString()
+    );
 
-    if (speedElement) {
-        speedElement.textContent = `${speed}×`;
-    }
+    setText(
+        "liveSpeed",
+        `${speed}×`
+    );
 }
 
 
@@ -933,13 +1006,16 @@ function updateGameUI() {
    ========================================== */
 
 async function gameLoop(now) {
-    if (screen !== "game") return;
 
-    lastTime = now;
+    if (screen !== "game") return;
 
     if (!paused) {
 
-        // Parallel simulated training
+        /*
+         * 32 parallel simulated environments.
+         * Training speed is controlled by speed.
+         */
+
         for (let k = 0; k < speed; k++) {
 
             const states = envs.x.map(
@@ -965,12 +1041,18 @@ async function gameLoop(now) {
 
         updateGameUI();
 
-        // Periodic model saving
+        // Save only after another 100 updates
         if (
-            agent.updates > 0 &&
-            agent.updates % 100 === 0
+            agent.updates >= lastSavedUpdate + 100 &&
+            !saving
         ) {
             agent.save();
+        }
+
+        // Periodic statistics save
+        if (now - lastStatsSave > 5000) {
+            saveStats();
+            lastStatsSave = now;
         }
     }
 
@@ -985,6 +1067,7 @@ async function gameLoop(now) {
    ========================================== */
 
 function drawStats() {
+
     const rate = stats.attempts
         ? 100 * stats.hits / stats.attempts
         : 0;
@@ -999,17 +1082,14 @@ function drawStats() {
     };
 
     Object.entries(values).forEach(([id, value]) => {
-        const element = $(id);
-
-        if (element) {
-            element.textContent = value;
-        }
+        setText(id, value);
     });
 
     drawChart();
 }
 
 function drawChart() {
+
     const canvas = $("statsChart");
 
     if (!canvas) return;
@@ -1035,6 +1115,7 @@ function drawChart() {
     ctx.lineWidth = 1;
 
     [0, 25, 50, 75, 100].forEach(value => {
+
         const y = bottom -
             (value / 100) * (bottom - top);
 
@@ -1053,6 +1134,7 @@ function drawChart() {
     const values = stats.history.slice(-20);
 
     if (!values.length) {
+
         ctx.fillText(
             "NO MATCH DATA — PLAY A MATCH FIRST",
             w / 2 - 160,
@@ -1079,8 +1161,10 @@ function drawChart() {
     ctx.beginPath();
 
     points.forEach((point, i) => {
+
         if (i === 0) {
             ctx.moveTo(point.x, point.y);
+
         } else {
             ctx.lineTo(point.x, point.y);
         }
@@ -1089,6 +1173,7 @@ function drawChart() {
     ctx.stroke();
 
     points.forEach(point => {
+
         ctx.fillStyle = "#edf4e9";
 
         ctx.fillRect(
@@ -1106,13 +1191,16 @@ function drawChart() {
    ========================================== */
 
 function togglePause() {
+
     if (screen !== "game") return;
 
     if (!paused) {
+
         paused = true;
         match.pauseStarted = performance.now();
 
     } else {
+
         paused = false;
 
         if (match.pauseStarted) {
@@ -1132,13 +1220,10 @@ function togglePause() {
         );
     }
 
-    const button = $("pauseBtn");
-
-    if (button) {
-        button.textContent = paused
-            ? "▶ RESUME"
-            : "Ⅱ PAUSE";
-    }
+    setText(
+        "pauseBtn",
+        paused ? "▶ RESUME" : "Ⅱ PAUSE"
+    );
 }
 
 
@@ -1147,6 +1232,7 @@ function togglePause() {
    ========================================== */
 
 async function init() {
+
     stats = loadStats();
 
     const status = $("modelStatus");
@@ -1156,10 +1242,11 @@ async function init() {
     }
 
     try {
+
         /*
          * FIX 1:
-         * Force TensorFlow.js to use CPU.
-         * This avoids WebGL initialization errors.
+         * Force TensorFlow.js CPU backend.
+         * No WebGL required.
          */
 
         await tf.setBackend("cpu");
@@ -1176,11 +1263,12 @@ async function init() {
 
         envs = new ParallelWorlds(32);
 
-        if (status) {
-            status.textContent = restored
+        setText(
+            "modelStatus",
+            restored
                 ? "AI MODEL: RESTORED"
-                : "AI MODEL: NEW";
-        }
+                : "AI MODEL: NEW"
+        );
 
         console.log(
             restored
@@ -1189,23 +1277,29 @@ async function init() {
         );
 
     } catch (error) {
+
         console.error(
             "AI initialization failed:",
             error
         );
 
-        if (status) {
-            status.textContent = "AI MODEL: ERROR";
-        }
+        setText(
+            "modelStatus",
+            "AI MODEL: ERROR"
+        );
 
         return;
     }
 
-    // PLAY
-    $("playBtn").addEventListener("click", () => {
-        newMatch();
 
-        lastTime = performance.now();
+    /* ======================================
+       BUTTON EVENTS
+       ====================================== */
+
+    // PLAY
+    bind("playBtn", "click", () => {
+
+        newMatch();
 
         cancelAnimationFrame(raf);
 
@@ -1213,37 +1307,28 @@ async function init() {
     });
 
     // STATISTICS
-    $("statsBtn").addEventListener("click", () => {
+    bind("statsBtn", "click", () => {
         show("stats");
         drawStats();
     });
 
     // BACK TO MENU
-    $("statsBackBtn").addEventListener(
-        "click",
-        () => show("menu")
-    );
+    bind("statsBackBtn", "click", () => {
+        show("menu");
+    });
 
-    // END MATCH / MENU
-    $("gameMenuBtn").addEventListener(
-        "click",
-        finishMatch
-    );
-
-    $("endMatchBtn").addEventListener(
-        "click",
-        finishMatch
-    );
+    // END MATCH
+    bind("gameMenuBtn", "click", finishMatch);
+    bind("endMatchBtn", "click", finishMatch);
 
     // NEW MATCH
-    $("newMatchBtn").addEventListener("click", () => {
+    bind("newMatchBtn", "click", () => {
+
         if (screen === "game") {
             finishMatch();
         }
 
         newMatch();
-
-        lastTime = performance.now();
 
         cancelAnimationFrame(raf);
 
@@ -1251,46 +1336,59 @@ async function init() {
     });
 
     // PAUSE
-    $("pauseBtn").addEventListener(
-        "click",
-        togglePause
-    );
+    bind("pauseBtn", "click", togglePause);
 
     // TRAINING SPEED
-    $("speedSelect").addEventListener("change", event => {
-        speed = Number(event.target.value);
+    bind("speedSelect", "change", event => {
+
+        const selected = Number(event.target.value);
+
+        if ([1, 5, 10, 20, 50].includes(selected)) {
+            speed = selected;
+        }
     });
 
-    // RESET DATA
-    $("resetStatsBtn").addEventListener(
-        "click",
-        async () => {
-            const confirmed = confirm(
-                "이 브라우저에 저장된 통계와 AI 모델을 모두 초기화할까요?"
+
+    /* ======================================
+       RESET AI AND STATISTICS
+       ====================================== */
+
+    bind("resetStatsBtn", "click", async () => {
+
+        const confirmed = confirm(
+            "이 브라우저에 저장된 통계와 AI 모델을 모두 초기화할까요?"
+        );
+
+        if (!confirmed) return;
+
+        cancelAnimationFrame(raf);
+
+        saveStats();
+
+        try {
+            await tf.io.removeModel(
+                `localstorage://${MODEL_KEY}`
             );
 
-            if (!confirmed) return;
-
-            localStorage.removeItem(STORAGE_KEY);
-
-            try {
-                await tf.io.removeModel(
-                    `localstorage://${MODEL_KEY}`
-                );
-            } catch (error) {
-                console.log("No saved model to remove.");
-            }
-
-            localStorage.removeItem("pong-ai-epsilon");
-            localStorage.removeItem("pong-ai-updates");
-            localStorage.removeItem("pong-ai-experiences");
-
-            location.reload();
+        } catch (error) {
+            console.log("No saved model to remove.");
         }
-    );
 
-    // KEYBOARD
+        localStorage.removeItem(STORAGE_KEY);
+        localStorage.removeItem("pong-ai-epsilon");
+        localStorage.removeItem("pong-ai-updates");
+        localStorage.removeItem("pong-ai-experiences");
+
+        location.reload();
+    });
+
+
+    /* ======================================
+       KEYBOARD
+       ====================================== */
+
     window.addEventListener("keydown", event => {
+
         keys[event.key] = true;
 
         if (
@@ -1306,18 +1404,30 @@ async function init() {
         keys[event.key] = false;
     });
 
-    // SAVE WHEN LEAVING
-    window.addEventListener("beforeunload", () => {
-        if (stats) {
-            saveStats();
-        }
 
-        if (agent) {
+    /* ======================================
+       SAVE ON PAGE EXIT
+       ====================================== */
+
+    window.addEventListener("beforeunload", () => {
+
+        saveStats();
+
+        // Start an asynchronous model save.
+        // Browsers may terminate it during page exit.
+        if (agent && !saving) {
             agent.save();
         }
     });
 
+
+    /* ======================================
+       START
+       ====================================== */
+
     show("menu");
+
+    console.log("PONG AI ARCADE READY");
 }
 
 
