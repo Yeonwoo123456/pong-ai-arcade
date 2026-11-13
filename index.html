@@ -1,4 +1,5 @@
 
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -7,14 +8,15 @@
     <meta name="theme-color" content="#050505">
     <title>PONG AI | Neural Arcade</title>
 
-    <!-- Inline SVG favicon -->
     <link rel="icon" type="image/svg+xml"
         href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%23050505'/%3E%3Crect x='8' y='8' width='48' height='48' rx='8' fill='%23c7ff4d'/%3E%3Ccircle cx='32' cy='32' r='9' fill='%23050505'/%3E%3C/svg%3E">
 
-    <link rel="stylesheet" href="./style.css?v=16">
+    <link rel="stylesheet" href="./style.css?v=17">
+
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js" defer></script>
-    <script src="./game.js?v=16" defer></script>
+    <script src="./game.js?v=17" defer></script>
 </head>
+
 <body>
 
     <!-- MAIN MENU -->
@@ -58,6 +60,7 @@
             </div>
 
             <div class="game-controls">
+
                 <button id="pauseBtn" class="secondary-btn" type="button">
                     PAUSE
                 </button>
@@ -69,6 +72,11 @@
                 <button id="gameMenuBtn" class="secondary-btn" type="button">
                     MENU
                 </button>
+
+                <button id="resetAIProgressBtn" class="secondary-btn" type="button">
+                    RESET AI LEARNING
+                </button>
+
             </div>
 
         </header>
@@ -135,9 +143,7 @@
 
                 <div class="metric-card">
                     <span class="metric-label">AI STATUS</span>
-                    <span id="modelStatus" class="metric-value">
-                        INITIALIZING
-                    </span>
+                    <span id="modelStatus" class="metric-value">INITIALIZING</span>
                 </div>
 
                 <div class="metric-card">
@@ -168,16 +174,11 @@
         <div class="stats-container">
 
             <header class="stats-header">
-
                 <h1>AI STATISTICS</h1>
 
-                <button
-                    id="statsBackBtn"
-                    class="secondary-btn"
-                    type="button">
+                <button id="statsBackBtn" class="secondary-btn" type="button">
                     BACK
                 </button>
-
             </header>
 
 
@@ -224,8 +225,8 @@
 
                 <canvas
                     id="statsChart"
-                    width="900"
-                    height="300">
+                    width="1000"
+                    height="360">
                 </canvas>
 
                 <div id="chartTooltip" class="chart-tooltip"></div>
@@ -233,17 +234,10 @@
             </div>
 
 
-            <!-- RESET CONTROLS -->
+            <!-- STATISTICS RESET -->
             <div class="stats-controls">
 
                 <div class="stats-reset-actions">
-
-                    <button
-                        id="resetAIProgressBtn"
-                        class="danger-btn"
-                        type="button">
-                        RESET AI LEARNING
-                    </button>
 
                     <button
                         id="resetStatsBtn"
@@ -262,4 +256,3 @@
 
 </body>
 </html>
-
