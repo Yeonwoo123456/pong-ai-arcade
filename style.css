@@ -1,322 +1,278 @@
 
-@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Space+Mono:wght@400;700&display=swap');
+/* =====================================================
+   CLASSIC PONG AI - ORIGINAL ARCADE DESIGN
+   Black / White / Green
+===================================================== */
+
+/* ---------- GLOBAL ---------- */
 
 :root {
-    --bg: #050606;
-    --panel: #0c1110;
-    --line: #34413b;
-    --white: #edf4e9;
-    --muted: #829087;
+    --bg: #050505;
+    --panel: #101010;
+    --white: #ffffff;
     --green: #c7ff4d;
-    --mint: #75e6b2;
-    --red: #ff6b62;
+    --gray: #888888;
+    --border: #292929;
 }
 
 * {
+    margin: 0;
+    padding: 0;
     box-sizing: border-box;
+}
+
+html,
+body {
+    width: 100%;
+    min-height: 100%;
+    background: var(--bg);
+    color: var(--white);
+    font-family: "Courier New", monospace;
 }
 
 body {
-    margin: 0;
-    background: var(--bg);
-    color: var(--white);
-    font-family: 'Space Mono', monospace;
     min-height: 100vh;
+    overflow-x: hidden;
 }
 
-.shell {
-    width: min(1120px, calc(100% - 32px));
-    margin: auto;
-    min-height: 100vh;
-    display: flex;
-    flex-direction: column;
+button {
+    font-family: inherit;
+    cursor: pointer;
 }
 
-.topline {
-    height: 68px;
-    border-bottom: 1px solid var(--line);
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-}
+/* ---------- SCREEN VISIBILITY ---------- */
 
-.brand {
-    font-weight: bold;
-    letter-spacing: 2px;
-}
-
-.brand-sub {
-    color: var(--muted);
-    font-size: 10px;
-    margin-left: 12px;
-}
-
-.top-status {
-    color: var(--mint);
-    font-size: 10px;
-}
+/* 기본 화면 */
 
 .screen {
-    flex: 1;
-    padding: 40px 0;
+    width: 100%;
+    min-height: 100vh;
+    background: var(--bg);
 }
 
-.hidden {
+/* 화면 숨김 우선순위 문제 방지 */
+
+.hidden,
+#menuScreen.hidden,
+#gameScreen.hidden,
+#statsScreen.hidden,
+#pauseOverlay.hidden {
     display: none !important;
 }
 
-.menu-center {
-    max-width: 620px;
-    margin: 30px auto;
-    text-align: center;
-}
+/* ---------- MAIN MENU ---------- */
 
-.eyebrow {
-    font-size: 10px;
-    letter-spacing: 2px;
-    color: var(--mint);
-}
-
-h1 {
-    font: 64px 'Press Start 2P', monospace;
-    margin: 30px 0;
-}
-
-h1 span {
-    color: var(--green);
-}
-
-.menu-stage {
-    height: 190px;
-    border: 2px solid var(--white);
-    position: relative;
-    background: #080c0a;
-}
-
-.stage-paddle {
-    height: 10px;
-    width: 90px;
-    background: var(--white);
-    position: absolute;
-    left: 50%;
-    transform: translateX(-50%);
-}
-
-.stage-top {
-    top: 20px;
-}
-
-.stage-bottom {
-    bottom: 20px;
-}
-
-.stage-ball {
-    position: absolute;
-    width: 11px;
-    height: 11px;
-    background: var(--green);
-    left: 50%;
-    top: 50%;
-}
-
-.stage-midline {
-    position: absolute;
-    height: 100%;
-    left: 50%;
-    border-left: 2px dashed #526056;
-}
-
-.tagline {
-    color: var(--muted);
-    font-size: 11px;
-    margin: 25px;
-}
-
-.menu-actions {
-    display: grid;
-    gap: 12px;
-    width: 250px;
-    margin: auto;
-}
-
-.arcade-button {
-    height: 52px;
-    border: 1px solid var(--white);
-    background: transparent;
-    color: var(--white);
-    font: 12px 'Space Mono', monospace;
-    cursor: pointer;
-}
-
-.arcade-button:hover,
-.arcade-button.primary {
-    background: var(--green);
-    color: #071006;
-    border-color: var(--green);
-}
-
-.game-toolbar {
+#menuScreen {
     display: flex;
-    justify-content: space-between;
+    justify-content: center;
     align-items: center;
-    margin-bottom: 14px;
+    text-align: center;
+    padding: 30px 20px;
 }
 
-.live-metrics {
-    display: flex;
-    gap: 20px;
-    color: var(--muted);
-    font-size: 10px;
-}
-
-.live-metrics b {
-    color: var(--green);
-}
-
-.small-button {
-    border: 1px solid var(--line);
-    background: #0b100e;
-    color: var(--white);
-    padding: 10px 13px;
-    font: 10px 'Space Mono', monospace;
-    cursor: pointer;
-}
-
-.small-button:hover {
-    border-color: var(--green);
-    color: var(--green);
-}
-
-.arena-wrap {
-    position: relative;
-    border: 2px solid var(--white);
-    background: #050806;
-}
-
-#arena {
-    display: block;
+.menu-container {
     width: 100%;
-    height: auto;
-}
-
-.pause-overlay {
-    position: absolute;
-    inset: 0;
-    display: grid;
-    place-items: center;
-    background: #0009;
-    color: var(--green);
-    font: 30px 'Press Start 2P';
-}
-
-.game-controls {
+    max-width: 500px;
     display: flex;
-    justify-content: space-between;
+    flex-direction: column;
+    align-items: center;
+}
+
+/* Logo */
+
+.logo {
+    margin-bottom: 55px;
+}
+
+.logo-small {
+    display: block;
+    color: var(--green);
+    font-size: 12px;
+    letter-spacing: 5px;
+    margin-bottom: 18px;
+}
+
+.logo h1 {
+    font-family: "Courier New", monospace;
+    font-size: clamp(65px, 10vw, 95px);
+    font-weight: 900;
+    letter-spacing: -7px;
+    line-height: 1;
+    color: var(--white);
+}
+
+.logo h1 span {
+    color: var(--green);
+}
+
+.logo p {
+    color: var(--gray);
+    font-size: 10px;
+    letter-spacing: 3px;
+    margin-top: 20px;
+}
+
+/* Menu Buttons */
+
+.menu-buttons {
+    width: 280px;
+    display: flex;
+    flex-direction: column;
+    gap: 13px;
+}
+
+.main-btn,
+.secondary-btn,
+.danger-btn {
+    min-height: 50px;
+    padding: 14px 20px;
+    font-size: 13px;
+    font-weight: bold;
+    letter-spacing: 2px;
+    border-radius: 0;
+    transition: background 0.15s, color 0.15s;
+}
+
+/* PLAY */
+
+.main-btn {
+    color: #000000;
+    background: var(--green);
+    border: 1px solid var(--green);
+}
+
+.main-btn:hover {
+    background: var(--white);
+    border-color: var(--white);
+}
+
+/* SECONDARY */
+
+.secondary-btn {
+    color: var(--white);
+    background: transparent;
+    border: 1px solid #555555;
+}
+
+.secondary-btn:hover {
+    color: var(--green);
+    border-color: var(--green);
+}
+
+/* DANGER */
+
+.danger-btn {
+    color: #ff6666;
+    background: transparent;
+    border: 1px solid #733333;
+}
+
+.danger-btn:hover {
+    color: var(--white);
+    background: #8b2929;
+}
+
+/* Model Status */
+
+.model-information {
+    display: flex;
+    justify-content: center;
     align-items: center;
     gap: 10px;
-    flex-wrap: wrap;
-    margin-top: 18px;
-    color: var(--muted);
+    margin-top: 35px;
+    color: var(--gray);
     font-size: 10px;
+    letter-spacing: 1px;
 }
 
-select {
-    background: #0b100e;
-    color: var(--green);
-    border: 1px solid var(--line);
-    padding: 8px;
+.status-indicator {
+    width: 7px;
+    height: 7px;
+    display: inline-block;
+    background: var(--green);
+    border-radius: 50%;
 }
 
-.section-head {
+/* Controls */
+
+.controls-information {
     display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 24px;
-}
-
-.section-head h2 {
-    font: 22px 'Press Start 2P';
-}
-
-.stat-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 12px;
-}
-
-.stat-card,
-.chart-card {
-    background: var(--panel);
-    border: 1px solid var(--line);
-    padding: 18px;
-}
-
-.stat-card span {
-    display: block;
-    color: var(--muted);
-    font-size: 9px;
-    margin-bottom: 13px;
-}
-
-.stat-card strong {
-    font-size: 24px;
-    color: var(--green);
-}
-
-.chart-card {
-    margin-top: 14px;
-}
-
-.chart-title {
-    color: var(--mint);
+    flex-direction: column;
+    gap: 7px;
+    margin-top: 55px;
+    color: #777777;
     font-size: 10px;
+    letter-spacing: 1px;
 }
 
-#statsChart {
-    width: 100%;
-    height: auto;
+.controls-information p {
+    color: var(--green);
+    margin-bottom: 5px;
+    font-weight: bold;
 }
 
-.footer {
-    border-top: 1px solid var(--line);
-    height: 42px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    color: var(--muted);
-    font-size: 9px;
-}
-
-@media(max-width:700px) {
-    h1 {
-        font-size: 42px;
-    }
-
-    .stat-grid {
-        grid-template-columns: repeat(2, 1fr);
-    }
-
-    .live-metrics {
-        gap: 8px;
-        font-size: 8px;
-    }
-}
-
-/* GAME SCREEN SIZE */
+/* ---------- GAME SCREEN ---------- */
 
 #gameScreen {
-    width: 100%;
-    min-height: 100vh;
-    box-sizing: border-box;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    padding: 16px;
+    padding: 20px;
 }
 
-#gameScreen.hidden {
-    display: none !important;
+/* Header */
+
+.game-header {
+    width: min(100%, 900px);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 20px;
+}
+
+.header-label {
+    display: block;
+    color: var(--green);
+    font-size: 9px;
+    letter-spacing: 2px;
+    margin-bottom: 5px;
+}
+
+.game-title h2 {
+    font-size: 20px;
+    letter-spacing: 2px;
+}
+
+.live-statistics {
+    display: flex;
+    gap: 25px;
+}
+
+.live-stat {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.live-stat span {
+    color: var(--gray);
+    font-size: 9px;
+    letter-spacing: 1px;
+}
+
+.live-stat strong {
+    color: var(--green);
+    font-size: 16px;
+}
+
+/* Canvas */
+
+.arena-container {
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
 }
 
 #arena {
@@ -326,12 +282,239 @@ select {
     max-height: 80vh;
     height: auto;
     aspect-ratio: 900 / 620;
-    object-fit: contain;
-    margin: 0 auto;
+    background: #050505;
+    border: 1px solid #333333;
 }
 
-html,
-body {
-    max-width: 100%;
-    overflow-x: hidden;
+/* Game Buttons */
+
+.game-controls {
+    display: flex;
+    justify-content: center;
+    gap: 12px;
+    margin-top: 20px;
+}
+
+.game-controls button {
+    min-width: 120px;
+    min-height: 40px;
+    padding: 10px;
+    font-size: 10px;
+}
+
+/* ---------- PAUSE OVERLAY ---------- */
+
+#pauseOverlay {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background: rgba(0, 0, 0, 0.88);
+}
+
+.overlay-content {
+    width: min(90%, 350px);
+    display: flex;
+    flex-direction: column;
+    gap: 13px;
+    padding: 35px;
+    text-align: center;
+    background: #101010;
+    border: 1px solid #444444;
+}
+
+.overlay-content h2 {
+    color: var(--green);
+    font-size: 28px;
+    margin-bottom: 5px;
+}
+
+.overlay-content p {
+    color: var(--gray);
+    font-size: 10px;
+    margin-bottom: 15px;
+}
+
+/* ---------- STATISTICS ---------- */
+
+#statsScreen {
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    padding: 45px 20px;
+}
+
+.stats-container {
+    width: 100%;
+    max-width: 950px;
+}
+
+/* Header */
+
+.stats-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 30px;
+}
+
+.stats-header h1 {
+    font-size: 28px;
+    letter-spacing: 2px;
+}
+
+.stats-header button {
+    min-width: 100px;
+}
+
+/* Cards */
+
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin-bottom: 30px;
+}
+
+.stat-card {
+    min-height: 105px;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 12px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+}
+
+.stat-card span {
+    color: var(--gray);
+    font-size: 9px;
+    letter-spacing: 1px;
+}
+
+.stat-card strong {
+    color: var(--green);
+    font-size: 25px;
+}
+
+/* Chart */
+
+.chart-container {
+    padding: 22px;
+    margin-bottom: 20px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+}
+
+.chart-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.chart-header h2 {
+    font-size: 12px;
+    letter-spacing: 2px;
+}
+
+.chart-legend {
+    display: flex;
+    gap: 15px;
+    font-size: 10px;
+}
+
+.player-legend {
+    color: var(--white);
+}
+
+.ai-legend {
+    color: var(--green);
+}
+
+#statsChart {
+    display: block;
+    width: 100%;
+    height: auto;
+    background: #080808;
+}
+
+#resetStatsBtn {
+    width: 100%;
+}
+
+/* ---------- RESPONSIVE ---------- */
+
+@media (max-width: 700px) {
+
+    #menuScreen {
+        padding: 20px;
+    }
+
+    .logo h1 {
+        font-size: 65px;
+    }
+
+    .game-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 15px;
+    }
+
+    .live-statistics {
+        width: 100%;
+        justify-content: space-between;
+        gap: 8px;
+    }
+
+    .live-stat span {
+        font-size: 8px;
+    }
+
+    #arena {
+        width: 100%;
+        max-height: none;
+    }
+
+    .game-controls {
+        width: 100%;
+        flex-wrap: wrap;
+    }
+
+    .game-controls button {
+        flex: 1;
+        min-width: 90px;
+        font-size: 8px;
+    }
+
+    .stats-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .stats-header h1 {
+        font-size: 21px;
+    }
+
+    .stat-card {
+        min-height: 90px;
+        padding: 13px;
+    }
+
+    .stat-card strong {
+        font-size: 20px;
+    }
+}
+
+@media (max-width: 400px) {
+    .stats-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .menu-buttons {
+        width: 100%;
+        max-width: 280px;
+    }
 }
