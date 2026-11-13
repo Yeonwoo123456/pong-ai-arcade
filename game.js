@@ -1,379 +1,315 @@
 
-/* ==========================================
-   PONG AI ARCADE
-   FINAL VERSION
-   DQN + CPU + PARALLEL TRAINING + SOUND
-   ========================================== */
+"use strict";
+
+// ============================================================
+// 1. CONFIGURATION
+// ============================================================
+
+const CONFIG = {
+    width: 900,
+    height: 620,
+
+    paddleWidth: 125,
+    paddleHeight: 13,
+    playerSpeed: 8,
+
+    ballRadius: 9,
+    ballSpeed: 5,
+
+    aiSpeed: 6.5,
+
+    parallelEnvironments: 32,
+
+    replayCapacity: 12000,
+    batchSize: 64,
+
+    gamma: 0.97,
+    learningRate: 0.0005,
+
+    epsilonStart: 1.0,
+    epsilonMin: 0.05,
+    epsilonDecay: 0.995,
+
+    targetUpdateFrequency: 10,
+
+    saveFrequency: 10
+};
+
+const MODEL_KEY = "pong-dqn-model-v3";
 
 const $ = id => document.getElementById(id);
 
-const W = 900;
-const H = 620;
-
-const PADDLE_W = 132;
-const PADDLE_H = 12;
-const BALL_R = 8;
-
-const TOP = 34;
-const BOTTOM = H - 34;
-
-const STORAGE_KEY = "pong-ai-arcade-v1";
-const MODEL_KEY = "pong-ai-dqn-v1";
+// ============================================================
+// 2. GLOBAL STATE
+// ============================================================
 
 let screen = "menu";
 let paused = false;
+let running = false;
 
-let raf = 0;
-let speed = 10;
+let raf = null;
+let lastFrameTime = 0;
 
 let agent = null;
 let envs = null;
-let live = null;
-let stats = null;
-let match = null;
-
-let keys = {};
 
 let saving = false;
+let trainingInProgress = false;
+let pendingTrainingEvents = 0;
+
 let lastSavedUpdate = 0;
 let lastStatsSave = 0;
 
-
-/* ==========================================
-   AUDIO SYSTEM - RETRO ARCADE
-   ========================================== */
-
 let audioContext = null;
-let soundEnabled = true;
+
+const keys = {
+    left: false,
+    right: false
+};
+
+let match = {
+    player: 0,
+    ai: 0,
+    startTime: 0,
+    duration: 0
+};
+
+let statistics = {
+    matches: 0,
+    playerPoints: 0,
+    aiPoints: 0,
+    totalDuration: 0,
+    updates: 0,
+    experiences: 0,
+    history: []
+};
+
+let liveBall = {
+    x: CONFIG.width / 2,
+    y: CONFIG.height / 2,
+    vx: CONFIG.ballSpeed,
+    vy: CONFIG.ballSpeed
+};
+
+let player = {
+    x: CONFIG.width / 2,
+    y: CONFIG.height - 42
+};
+
+let ai = {
+    x: CONFIG.width / 2,
+    y: 35
+};
+
+// ============================================================
+// 3. AUDIO SYSTEM
+// ============================================================
 
 function initAudio() {
     if (!audioContext) {
-        const AudioClass =
-            window.AudioContext ||
-            window.webkitAudioContext;
+        const AudioContextClass =
+            window.AudioContext || window.webkitAudioContext;
 
-        if (!AudioClass) {
-            console.warn("Web Audio API is unavailable.");
-            return;
+        if (AudioContextClass) {
+            audioContext = new AudioContextClass();
         }
-
-        audioContext = new AudioClass();
     }
 
-    if (audioContext.state === "suspended") {
-        audioContext.resume().catch(error => {
-            console.warn("Audio resume failed:", error);
-        });
+    if (audioContext && audioContext.state === "suspended") {
+        audioContext.resume();
     }
 }
 
-function playTone(
-    frequency = 500,
-    duration = 0.07,
-    type = "square",
-    volume = 0.035,
-    endFrequency = null
-) {
-    if (!soundEnabled || !audioContext) return;
-
-    if (audioContext.state !== "running") {
-        audioContext.resume().catch(() => {});
-    }
+function playTone(frequency, duration, volume = 0.05, type = "square") {
+    if (!audioContext) return;
 
     const oscillator = audioContext.createOscillator();
     const gain = audioContext.createGain();
 
-    const now = audioContext.currentTime;
-
     oscillator.type = type;
+    oscillator.frequency.value = frequency;
 
-    oscillator.frequency.setValueAtTime(
-        frequency,
-        now
-    );
-
-    if (endFrequency !== null) {
-        oscillator.frequency.exponentialRampToValueAtTime(
-            Math.max(1, endFrequency),
-            now + duration
-        );
-    }
-
-    gain.gain.setValueAtTime(volume, now);
-
+    gain.gain.setValueAtTime(volume, audioContext.currentTime);
     gain.gain.exponentialRampToValueAtTime(
         0.001,
-        now + duration
+        audioContext.currentTime + duration
     );
 
     oscillator.connect(gain);
     gain.connect(audioContext.destination);
 
-    oscillator.start(now);
-    oscillator.stop(now + duration);
+    oscillator.start();
+    oscillator.stop(audioContext.currentTime + duration);
 }
 
-// Button click
 function playButtonSound() {
-    playTone(850, 0.055, "square", 0.025, 620);
+    playTone(650, 0.06, 0.025);
 }
 
-// Wall collision
 function playWallSound() {
-    playTone(280, 0.045, "square", 0.025, 190);
+    playTone(260, 0.045, 0.025);
 }
 
-// Paddle collision
 function playPaddleSound() {
-    playTone(620, 0.075, "square", 0.04, 420);
+    playTone(420, 0.07, 0.04);
 }
 
-// Scoring
 function playScoreSound() {
-    playTone(420, 0.09, "square", 0.035, 220);
-
-    setTimeout(() => {
-        playTone(220, 0.12, "square", 0.03, 130);
-    }, 100);
+    playTone(520, 0.12, 0.05);
+    setTimeout(() => playTone(780, 0.15, 0.04), 100);
 }
 
-// Match start
 function playStartSound() {
-    playTone(440, 0.08, "square", 0.025);
-
-    setTimeout(() => {
-        playTone(660, 0.08, "square", 0.025);
-    }, 100);
+    playTone(440, 0.1);
+    setTimeout(() => playTone(660, 0.1), 100);
 }
 
-// Match end
 function playEndSound() {
-    playTone(440, 0.12, "square", 0.03, 330);
-
-    setTimeout(() => {
-        playTone(330, 0.16, "square", 0.03, 220);
-    }, 130);
+    playTone(300, 0.2);
+    setTimeout(() => playTone(200, 0.25), 180);
 }
 
-// Sound toggle
-function toggleSound() {
-    soundEnabled = !soundEnabled;
+// ============================================================
+// 4. REPLAY MEMORY
+// ============================================================
 
-    if (soundEnabled) {
-        initAudio();
-        playButtonSound();
+class ReplayMemory {
+    constructor(capacity) {
+        this.capacity = capacity;
+        this.memory = [];
+        this.position = 0;
     }
 
-    return soundEnabled;
-}
-
-
-/* ==========================================
-   UTILITIES
-   ========================================== */
-
-function clamp(value, min, max) {
-    return Math.max(min, Math.min(max, value));
-}
-
-function reflect(x) {
-    const span = W - 2 * BALL_R;
-
-    let q = (x - BALL_R) % (2 * span);
-
-    if (q < 0) q += 2 * span;
-
-    return BALL_R + (
-        q <= span ? q : 2 * span - q
-    );
-}
-
-function formatTime(seconds) {
-    const m = Math.floor(seconds / 60);
-    const s = Math.floor(seconds % 60);
-
-    return (
-        String(m).padStart(2, "0") +
-        ":" +
-        String(s).padStart(2, "0")
-    );
-}
-
-function setText(id, value) {
-    const element = $(id);
-
-    if (element) {
-        element.textContent = value;
-    }
-}
-
-function bind(id, event, callback) {
-    const element = $(id);
-
-    if (!element) {
-        console.warn(`HTML element not found: #${id}`);
-        return;
-    }
-
-    element.addEventListener(event, callback);
-}
-
-function defaultStats() {
-    return {
-        matches: 0,
-        hits: 0,
-        attempts: 0,
-        seconds: 0,
-        experiences: 0,
-        history: []
-    };
-}
-
-
-/* ==========================================
-   STATISTICS STORAGE
-   ========================================== */
-
-function loadStats() {
-    try {
-        const saved = JSON.parse(
-            localStorage.getItem(STORAGE_KEY) || "{}"
-        );
-
-        return {
-            ...defaultStats(),
-            ...saved
+    add(state, action, reward, nextState, done) {
+        const experience = {
+            state: [...state],
+            action,
+            reward,
+            nextState: [...nextState],
+            done
         };
 
-    } catch (error) {
-        console.warn("Statistics loading failed:", error);
-        return defaultStats();
-    }
-}
-
-function saveStats() {
-    try {
-        localStorage.setItem(
-            STORAGE_KEY,
-            JSON.stringify(stats)
-        );
-
-    } catch (error) {
-        console.error("Statistics save failed:", error);
-    }
-}
-
-
-/* ==========================================
-   SCREEN MANAGEMENT
-   ========================================== */
-
-function show(name) {
-    screen = name;
-
-    [
-        "menuScreen",
-        "gameScreen",
-        "statsScreen"
-    ].forEach(id => {
-        const element = $(id);
-
-        if (element) {
-            element.classList.add("hidden");
+        if (this.memory.length < this.capacity) {
+            this.memory.push(experience);
+        } else {
+            this.memory[this.position] = experience;
         }
-    });
 
-    const target = $(`${name}Screen`);
-
-    if (target) {
-        target.classList.remove("hidden");
+        this.position = (this.position + 1) % this.capacity;
     }
 
-    if (name === "stats") {
-        drawStats();
+    sample(batchSize) {
+        const result = [];
+
+        for (let i = 0; i < batchSize; i++) {
+            const index = Math.floor(
+                Math.random() * this.memory.length
+            );
+
+            result.push(this.memory[index]);
+        }
+
+        return result;
+    }
+
+    get length() {
+        return this.memory.length;
     }
 }
 
+// ============================================================
+// 5. DQN AGENT
+// ============================================================
 
-/* ==========================================
-   DQN AGENT
-   ========================================== */
-
-class DQN {
-
+class DQNAgent {
     constructor() {
-        this.model = this.makeModel();
-        this.target = this.makeModel();
+        this.memory = new ReplayMemory(CONFIG.replayCapacity);
 
-        this.copyWeights();
-
-        this.optimizer = tf.train.adam(0.0005);
-
-        this.memory = [];
-        this.maxMemory = 30000;
-
-        this.gamma = 0.985;
-        this.batch = 64;
-
-        this.epsilon = 1.0;
-        this.minEpsilon = 0.04;
-        this.decay = 0.9996;
-
+        this.epsilon = CONFIG.epsilonStart;
         this.updates = 0;
         this.experiences = 0;
+
+        this.model = null;
+        this.target = null;
+
+        this.ready = false;
     }
 
-    makeModel() {
+    createModel() {
         const model = tf.sequential();
 
-        model.add(
-            tf.layers.dense({
-                inputShape: [7],
-                units: 96,
-                activation: "relu"
-            })
-        );
+        model.add(tf.layers.dense({
+            inputShape: [5],
+            units: 64,
+            activation: "relu"
+        }));
 
-        model.add(
-            tf.layers.dense({
-                units: 96,
-                activation: "relu"
-            })
-        );
+        model.add(tf.layers.dense({
+            units: 64,
+            activation: "relu"
+        }));
 
-        model.add(
-            tf.layers.dense({
-                units: 3
-            })
-        );
+        model.add(tf.layers.dense({
+            units: 3,
+            activation: "linear"
+        }));
+
+        model.compile({
+            optimizer: tf.train.adam(CONFIG.learningRate),
+            loss: "meanSquaredError"
+        });
 
         return model;
     }
 
-    /*
-     * Clone temporary tensors before copying.
-     * Never dispose tensors owned by the source model.
-     */
+    async initialize() {
+        this.model = this.createModel();
+        this.target = this.createModel();
+
+        try {
+            await this.model.loadWeights(
+                `localstorage://${MODEL_KEY}`
+            );
+        } catch (error) {
+            console.log("No previous model found. Starting fresh.");
+        }
+
+        this.copyWeights();
+
+        this.epsilon = Number(
+            localStorage.getItem("pong-ai-epsilon")
+        ) || CONFIG.epsilonStart;
+
+        this.updates = Number(
+            localStorage.getItem("pong-ai-updates")
+        ) || 0;
+
+        this.experiences = Number(
+            localStorage.getItem("pong-ai-experiences")
+        ) || 0;
+
+        this.ready = true;
+
+        updateModelStatus("AI MODEL READY");
+        updateGameUI();
+    }
 
     copyWeights() {
-        const weights = this.model
-            .getWeights()
-            .map(weight => weight.clone());
+        const weights = this.model.getWeights().map(
+            weight => weight.clone()
+        );
 
         try {
             this.target.setWeights(weights);
-
         } finally {
             weights.forEach(weight => weight.dispose());
         }
     }
 
-    act(state, explore = true) {
+    act(state, training = false) {
+        if (!this.ready || !this.model) return 1;
 
-        if (
-            explore &&
-            Math.random() < this.epsilon
-        ) {
+        if (training && Math.random() < this.epsilon) {
             return Math.floor(Math.random() * 3);
         }
 
@@ -387,121 +323,94 @@ class DQN {
     }
 
     remember(state, action, reward, nextState, done) {
-        if (this.memory.length >= this.maxMemory) {
-            this.memory.shift();
-        }
-
-        this.memory.push([
+        this.memory.add(
             state,
             action,
             reward,
             nextState,
             done
-        ]);
+        );
 
         this.experiences++;
     }
 
-    async learn(repeats = 1) {
-
-        if (this.memory.length < this.batch) {
-            return;
+    async learnOnce() {
+        if (
+            !this.ready ||
+            this.memory.length < CONFIG.batchSize
+        ) {
+            return false;
         }
 
-        for (let n = 0; n < repeats; n++) {
+        const batch = this.memory.sample(CONFIG.batchSize);
 
-            const batch = [];
+        const states = batch.map(item => item.state);
+        const nextStates = batch.map(item => item.nextState);
 
-            for (let i = 0; i < this.batch; i++) {
-                const index = Math.floor(
-                    Math.random() * this.memory.length
-                );
+        const actions = batch.map(item => item.action);
+        const rewards = batch.map(item => item.reward);
+        const dones = batch.map(item => item.done);
 
-                batch.push(this.memory[index]);
+        const stateTensor = tf.tensor2d(states);
+        const nextTensor = tf.tensor2d(nextStates);
+
+        const currentQ = this.model.predict(stateTensor);
+        const nextQ = this.target.predict(nextTensor);
+
+        const currentValues = await currentQ.array();
+        const nextValues = await nextQ.array();
+
+        const targets = currentValues.map((values, i) => {
+            const nextMax = Math.max(...nextValues[i]);
+
+            const targetValue = dones[i]
+                ? rewards[i]
+                : rewards[i] + CONFIG.gamma * nextMax;
+
+            const updated = [...values];
+            updated[actions[i]] = targetValue;
+
+            return updated;
+        });
+
+        const targetTensor = tf.tensor2d(targets);
+
+        await this.model.fit(
+            stateTensor,
+            targetTensor,
+            {
+                epochs: 1,
+                batchSize: CONFIG.batchSize,
+                verbose: 0
             }
+        );
 
-            const states = batch.map(x => x[0]);
-            const nextStates = batch.map(x => x[3]);
+        tf.dispose([
+            stateTensor,
+            nextTensor,
+            currentQ,
+            nextQ,
+            targetTensor
+        ]);
 
-            const actions = batch.map(x => x[1]);
-            const rewards = batch.map(x => x[2]);
-            const dones = batch.map(x => x[4] ? 1 : 0);
+        this.updates++;
 
-            const xs = tf.tensor2d(states);
-            const nxs = tf.tensor2d(nextStates);
+        this.epsilon = Math.max(
+            CONFIG.epsilonMin,
+            this.epsilon * CONFIG.epsilonDecay
+        );
 
-            const rewardTensor = tf.tensor1d(rewards);
-            const doneTensor = tf.tensor1d(dones);
-
-            const nextQ = this.target.predict(nxs);
-            const maxNextQ = nextQ.max(1);
-
-            const targets = tf.tidy(() => {
-                return rewardTensor.add(
-                    maxNextQ.mul(this.gamma).mul(
-                        tf.scalar(1).sub(doneTensor)
-                    )
-                );
-            });
-
-            const currentQ = this.model.predict(xs);
-
-            const currentArray = currentQ.arraySync();
-            const targetArray = targets.dataSync();
-
-            for (let i = 0; i < this.batch; i++) {
-                currentArray[i][actions[i]] = targetArray[i];
-            }
-
-            const ys = tf.tensor2d(currentArray);
-
-            const loss = this.optimizer.minimize(() => {
-                const predictions = this.model.predict(xs);
-
-                return tf.losses.huberLoss(
-                    ys,
-                    predictions
-                ).mean();
-
-            }, true);
-
-            if (loss) {
-                loss.dispose();
-            }
-
-            tf.dispose([
-                xs,
-                nxs,
-                rewardTensor,
-                doneTensor,
-                nextQ,
-                maxNextQ,
-                targets,
-                currentQ,
-                ys
-            ]);
-
-            this.epsilon = Math.max(
-                this.minEpsilon,
-                this.epsilon * this.decay
-            );
-
-            this.updates++;
-
-            if (this.updates % 180 === 0) {
-                this.copyWeights();
-            }
+        if (
+            this.updates % CONFIG.targetUpdateFrequency === 0
+        ) {
+            this.copyWeights();
         }
+
+        return true;
     }
 
-    /*
-     * Prevent concurrent model saving.
-     */
-
     async save() {
-        if (saving || !this.model) {
-            return;
-        }
+        if (!this.ready || saving) return;
 
         saving = true;
 
@@ -528,7 +437,7 @@ class DQN {
             lastSavedUpdate = this.updates;
 
             console.log(
-                "AI model saved successfully.",
+                "AI model saved.",
                 "Updates:",
                 this.updates
             );
@@ -540,212 +449,122 @@ class DQN {
             saving = false;
         }
     }
-
-    async load() {
-        try {
-            const restored = await tf.loadLayersModel(
-                `localstorage://${MODEL_KEY}`
-            );
-
-            this.model.dispose();
-            this.target.dispose();
-
-            this.model = restored;
-            this.target = this.makeModel();
-
-            this.copyWeights();
-
-            this.epsilon = Number(
-                localStorage.getItem("pong-ai-epsilon") || 1
-            );
-
-            this.updates = Number(
-                localStorage.getItem("pong-ai-updates") || 0
-            );
-
-            this.experiences = Number(
-                localStorage.getItem("pong-ai-experiences") || 0
-            );
-
-            lastSavedUpdate = this.updates;
-
-            console.log("Saved AI model restored.");
-
-            return true;
-
-        } catch (error) {
-            console.log(
-                "No saved AI model found. Starting new model."
-            );
-
-            return false;
-        }
-    }
-
-    dispose() {
-        this.model.dispose();
-        this.target.dispose();
-        this.optimizer.dispose();
-    }
 }
 
+// ============================================================
+// 6. TRAINING ENVIRONMENTS
+// ============================================================
 
-/* ==========================================
-   PARALLEL TRAINING ENVIRONMENTS
-   ========================================== */
+class TrainingEnvironments {
+    constructor(count) {
+        this.count = count;
 
-class ParallelWorlds {
-
-    constructor(count = 32) {
-        this.n = count;
-        this.resetAll();
+        this.worlds = Array.from(
+            { length: count },
+            () => this.createWorld()
+        );
     }
 
-    resetOne(i) {
-        this.x[i] = 100 + Math.random() * (W - 200);
+    createWorld() {
+        return {
+            ballX: CONFIG.width / 2,
+            ballY: CONFIG.height / 2,
 
-        this.y[i] =
-            H * 0.4 + Math.random() * H * 0.35;
+            vx: (Math.random() < 0.5 ? -1 : 1) *
+                CONFIG.ballSpeed,
 
-        this.vx[i] =
-            (Math.random() < 0.5 ? -1 : 1) *
-            (2 + Math.random() * 3);
+            vy: CONFIG.ballSpeed,
 
-        this.vy[i] = -(3 + Math.random() * 3);
+            aiX: CONFIG.width / 2,
+            playerX: CONFIG.width / 2,
 
-        this.p[i] = 100 + Math.random() * (W - 200);
-
-        this.age[i] = 0;
+            done: false
+        };
     }
 
-    resetAll() {
-        this.x = [];
-        this.y = [];
-        this.vx = [];
-        this.vy = [];
-        this.p = [];
-        this.age = [];
-
-        for (let i = 0; i < this.n; i++) {
-            this.resetOne(i);
-        }
-    }
-
-    state(i) {
-        const distance = Math.max(
-            0,
-            this.y[i] - (TOP + PADDLE_H + BALL_R)
-        );
-
-        const t = distance / Math.max(
-            0.1,
-            -this.vy[i]
-        );
-
-        const intercept = reflect(
-            this.x[i] + this.vx[i] * t
-        );
+    state(index) {
+        const world = this.worlds[index];
 
         return [
-            this.x[i] / W,
-            this.y[i] / H,
-            this.vx[i] / 7,
-            this.vy[i] / 7,
-            this.p[i] / W,
-            intercept / W,
-            (intercept - this.p[i]) / W
+            world.ballX / CONFIG.width,
+            world.ballY / CONFIG.height,
+            world.vx / 10,
+            world.vy / 10,
+            (world.ballX - world.aiX) / CONFIG.width
         ];
     }
 
     step(actions) {
         const transitions = [];
 
-        for (let i = 0; i < this.n; i++) {
+        for (let i = 0; i < this.count; i++) {
+            const world = this.worlds[i];
 
             const oldState = this.state(i);
-            const oldDistance = Math.abs(oldState[6]);
 
-            // 0 = LEFT, 1 = STAY, 2 = RIGHT
-            this.p[i] = clamp(
-                this.p[i] + (actions[i] - 1) * 6,
-                PADDLE_W / 2,
-                W - PADDLE_W / 2
+            const action = actions[i];
+
+            // 0 = left, 1 = stay, 2 = right
+            if (action === 0) world.aiX -= CONFIG.aiSpeed;
+            if (action === 2) world.aiX += CONFIG.aiSpeed;
+
+            world.aiX = Math.max(
+                CONFIG.paddleWidth / 2,
+                Math.min(
+                    CONFIG.width - CONFIG.paddleWidth / 2,
+                    world.aiX
+                )
             );
 
-            this.x[i] += this.vx[i];
-            this.y[i] += this.vy[i];
+            world.ballX += world.vx;
+            world.ballY += world.vy;
+
+            let reward = 0;
+            let done = false;
 
             if (
-                this.x[i] < BALL_R ||
-                this.x[i] > W - BALL_R
+                world.ballX <= CONFIG.ballRadius ||
+                world.ballX >= CONFIG.width - CONFIG.ballRadius
             ) {
-                this.vx[i] *= -1;
-
-                this.x[i] = clamp(
-                    this.x[i],
-                    BALL_R,
-                    W - BALL_R
-                );
+                world.vx *= -1;
             }
 
-            const topLine =
-                this.y[i] <= TOP + PADDLE_H + BALL_R;
+            const aiHit =
+                world.vy < 0 &&
+                world.ballY - CONFIG.ballRadius <=
+                    CONFIG.paddleHeight + 42 &&
+                world.ballX >=
+                    world.aiX - CONFIG.paddleWidth / 2 &&
+                world.ballX <=
+                    world.aiX + CONFIG.paddleWidth / 2;
 
-            const hit = topLine &&
-                Math.abs(this.x[i] - this.p[i]) <=
-                PADDLE_W / 2 + BALL_R;
-
-            const missed =
-                this.y[i] <= TOP + BALL_R;
-
-            let reward =
-                -0.002 -
-                0.012 * Math.min(oldDistance, 1);
-
-            if (hit) {
-                reward += 1;
-
-                this.y[i] =
-                    TOP + PADDLE_H + BALL_R + 1;
-
-                this.vy[i] =
-                    Math.abs(this.vy[i]) * 1.01;
-
-                this.vx[i] = clamp(
-                    this.vx[i] +
-                    (this.x[i] - this.p[i]) * 0.025,
-                    -7,
-                    7
-                );
+            if (aiHit) {
+                world.vy = Math.abs(world.vy);
+                reward = 1;
             }
 
-            if (missed && !hit) {
-                reward -= 1;
+            if (world.ballY > CONFIG.height) {
+                reward = -1;
+                done = true;
             }
 
-            this.age[i]++;
-
-            if (this.y[i] > H - BALL_R) {
-                this.y[i] = H - BALL_R;
-                this.vy[i] *= -1;
+            if (world.ballY < 0) {
+                reward = 1;
+                done = true;
             }
-
-            const done =
-                (missed && !hit) ||
-                this.age[i] > 850;
 
             const nextState = this.state(i);
 
             transitions.push([
                 oldState,
-                actions[i],
+                action,
                 reward,
                 nextState,
                 done
             ]);
 
             if (done) {
-                this.resetOne(i);
+                this.worlds[i] = this.createWorld();
             }
         }
 
@@ -753,421 +572,27 @@ class ParallelWorlds {
     }
 }
 
+// ============================================================
+// 7. POINT-BASED TRAINING
+// ============================================================
 
-/* ==========================================
-   LIVE GAME
-   ========================================== */
+async function trainAfterPoint() {
+    if (!agent || !envs || !agent.ready) return;
 
-function resetLiveBall() {
-    live.x = W / 2;
-    live.y = H / 2;
+    // Queue scoring events instead of dropping them.
+    pendingTrainingEvents++;
 
-    live.vx =
-        (Math.random() < 0.5 ? -1 : 1) * 4;
+    if (trainingInProgress) return;
 
-    live.vy =
-        (Math.random() < 0.5 ? -1 : 1) * 4.2;
-}
+    trainingInProgress = true;
 
-function newMatch() {
-    match = {
-        player: 0,
-        ai: 0,
-        hits: 0,
-        attempts: 0,
-        seconds: 0,
-        started: performance.now(),
-        pausedDuration: 0,
-        pauseStarted: null,
-        historySaved: false
-    };
+    try {
+        while (pendingTrainingEvents > 0) {
+            pendingTrainingEvents--;
 
-    live = {
-        px: W / 2,
-        ax: W / 2,
-        x: W / 2,
-        y: H / 2,
-        vx: 4,
-        vy: 4.2
-    };
-
-    resetLiveBall();
-
-    paused = false;
-
-    const overlay = $("pauseOverlay");
-
-    if (overlay) {
-        overlay.classList.add("hidden");
-    }
-
-    setText("pauseBtn", "Ⅱ PAUSE");
-
-    show("game");
-
-    playStartSound();
-}
-
-function getMatchSeconds() {
-    if (!match) return 0;
-
-    const now = paused && match.pauseStarted
-        ? match.pauseStarted
-        : performance.now();
-
-    return Math.max(
-        0,
-        (
-            now -
-            match.started -
-            match.pausedDuration
-        ) / 1000
-    );
-}
-
-function finishMatch() {
-    if (
-        screen !== "game" ||
-        !match ||
-        match.historySaved
-    ) {
-        return;
-    }
-
-    match.seconds = getMatchSeconds();
-
-    stats.matches++;
-
-    stats.hits += match.hits;
-    stats.attempts += match.attempts;
-    stats.seconds += match.seconds;
-
-    const rate = match.attempts
-        ? 100 * match.hits / match.attempts
-        : 0;
-
-    stats.history.push({
-        rate,
-        duration: match.seconds,
-        updates: agent.updates
-    });
-
-    stats.history = stats.history.slice(-30);
-
-    stats.experiences = agent.experiences;
-
-    match.historySaved = true;
-
-    saveStats();
-    agent.save();
-
-    cancelAnimationFrame(raf);
-
-    playEndSound();
-
-    show("menu");
-}
-
-function liveState() {
-    const distance = Math.max(
-        0,
-        live.y - (TOP + PADDLE_H + BALL_R)
-    );
-
-    const direction = live.vy < 0 ? 1 : -1;
-
-    const t = distance / Math.max(
-        0.1,
-        Math.abs(live.vy)
-    );
-
-    const intercept = reflect(
-        live.x + live.vx * t * direction
-    );
-
-    return [
-        live.x / W,
-        live.y / H,
-        live.vx / 7,
-        live.vy / 7,
-        live.ax / W,
-        intercept / W,
-        (intercept - live.ax) / W
-    ];
-}
-
-function moveLive() {
-
-    // PLAYER: BOTTOM
-
-    if (keys.ArrowLeft || keys.a || keys.A) {
-        live.px -= 8;
-    }
-
-    if (keys.ArrowRight || keys.d || keys.D) {
-        live.px += 8;
-    }
-
-    live.px = clamp(
-        live.px,
-        PADDLE_W / 2,
-        W - PADDLE_W / 2
-    );
-
-    // AI: TOP
-
-    const action = agent.act(
-        liveState(),
-        false
-    );
-
-    live.ax = clamp(
-        live.ax + (action - 1) * 7.5,
-        PADDLE_W / 2,
-        W - PADDLE_W / 2
-    );
-
-    // BALL MOVEMENT
-
-    live.x += live.vx;
-    live.y += live.vy;
-
-    // LEFT AND RIGHT WALLS
-
-    if (
-        live.x < BALL_R ||
-        live.x > W - BALL_R
-    ) {
-        live.vx *= -1;
-
-        live.x = clamp(
-            live.x,
-            BALL_R,
-            W - BALL_R
-        );
-
-        playWallSound();
-    }
-
-    // AI COLLISION: TOP
-
-    if (
-        live.vy < 0 &&
-        live.y - BALL_R <= TOP + PADDLE_H
-    ) {
-        match.attempts++;
-
-        if (
-            Math.abs(live.x - live.ax) <=
-            PADDLE_W / 2 + BALL_R
-        ) {
-            match.hits++;
-
-            live.y = TOP + PADDLE_H + BALL_R;
-
-            live.vy = Math.abs(live.vy) * 1.02;
-
-            live.vx = clamp(
-                live.vx +
-                (live.x - live.ax) * 0.035,
-                -7,
-                7
-            );
-
-            playPaddleSound();
-
-        } else {
-            match.player++;
-
-            playScoreSound();
-
-            resetLiveBall();
-        }
-    }
-
-    // PLAYER COLLISION: BOTTOM
-
-    if (
-        live.vy > 0 &&
-        live.y + BALL_R >= BOTTOM
-    ) {
-        if (
-            Math.abs(live.x - live.px) <=
-            PADDLE_W / 2 + BALL_R
-        ) {
-            live.y = BOTTOM - BALL_R;
-
-            live.vy = -Math.abs(live.vy) * 1.02;
-
-            live.vx = clamp(
-                live.vx +
-                (live.x - live.px) * 0.035,
-                -7,
-                7
-            );
-
-            playPaddleSound();
-
-        } else {
-            match.ai++;
-
-            playScoreSound();
-
-            resetLiveBall();
-        }
-    }
-
-    match.seconds = getMatchSeconds();
-}
-
-
-/* ==========================================
-   CANVAS RENDERING
-   ========================================== */
-
-function drawArena() {
-    const canvas = $("arena");
-
-    if (!canvas) return;
-
-    const ctx = canvas.getContext("2d");
-
-    if (!ctx) return;
-
-    ctx.fillStyle = "#050806";
-    ctx.fillRect(0, 0, W, H);
-
-    // BORDER
-
-    ctx.strokeStyle = "#dce8dc";
-    ctx.lineWidth = 2;
-
-    ctx.strokeRect(
-        8,
-        8,
-        W - 16,
-        H - 16
-    );
-
-    // CENTER LINE
-
-    ctx.setLineDash([10, 13]);
-
-    ctx.strokeStyle = "#536157";
-
-    ctx.beginPath();
-    ctx.moveTo(W / 2, 12);
-    ctx.lineTo(W / 2, H - 12);
-    ctx.stroke();
-
-    ctx.setLineDash([]);
-
-    // AI PADDLE TOP
-
-    ctx.fillStyle = "#edf4e9";
-
-    ctx.fillRect(
-        live.ax - PADDLE_W / 2,
-        TOP,
-        PADDLE_W,
-        PADDLE_H
-    );
-
-    // PLAYER PADDLE BOTTOM
-
-    ctx.fillRect(
-        live.px - PADDLE_W / 2,
-        BOTTOM - PADDLE_H,
-        PADDLE_W,
-        PADDLE_H
-    );
-
-    // BALL
-
-    ctx.fillStyle = "#c7ff4d";
-
-    ctx.fillRect(
-        live.x - BALL_R,
-        live.y - BALL_R,
-        BALL_R * 2,
-        BALL_R * 2
-    );
-
-    // SCORE
-
-    ctx.fillStyle = "#c7ff4d";
-    ctx.font = "bold 17px monospace";
-
-    ctx.fillText(
-        `${match.player} : ${match.ai}`,
-        W / 2 - 28,
-        H / 2 - 15
-    );
-
-    // LABELS
-
-    ctx.fillStyle = "#75e6b2";
-    ctx.font = "12px monospace";
-
-    ctx.fillText(
-        "AI — TOP PADDLE",
-        22,
-        TOP + 10
-    );
-
-    ctx.fillStyle = "#ffcf75";
-
-    ctx.fillText(
-        "PLAYER — BOTTOM PADDLE",
-        22,
-        BOTTOM - 18
-    );
-}
-
-
-/* ==========================================
-   GAME UI
-   ========================================== */
-
-function updateGameUI() {
-
-    setText(
-        "liveRate",
-        match.attempts
-            ? `${(
-                100 * match.hits / match.attempts
-            ).toFixed(1)}%`
-            : "—"
-    );
-
-    setText(
-        "liveUpdates",
-        agent.updates.toLocaleString()
-    );
-
-    setText(
-        "liveSpeed",
-        `${speed}×`
-    );
-}
-
-
-/* ==========================================
-   TRAINING LOOP
-   ========================================== */
-
-async function gameLoop(now) {
-
-    if (screen !== "game") return;
-
-    if (!paused) {
-
-        // Parallel simulated training
-
-        for (let k = 0; k < speed; k++) {
-
-            const states = envs.x.map(
-                (_, i) => envs.state(i)
+            // Collect one batch of experiences from parallel worlds.
+            const states = envs.worlds.map(
+                (_, index) => envs.state(index)
             );
 
             const actions = states.map(
@@ -1180,25 +605,293 @@ async function gameLoop(now) {
                 agent.remember(...transition);
             });
 
-            if (agent.memory.length >= agent.batch) {
-                await agent.learn(1);
+            // Exactly one DQN update for this scoring event.
+            await agent.learnOnce();
+
+            updateGameUI();
+
+            if (
+                agent.updates > 0 &&
+                agent.updates >= lastSavedUpdate + CONFIG.saveFrequency
+            ) {
+                await agent.save();
             }
         }
 
-        moveLive();
+    } catch (error) {
+        console.error("Point training failed:", error);
+
+    } finally {
+        trainingInProgress = false;
+        updateGameUI();
+    }
+}
+
+// ============================================================
+// 8. LIVE GAME
+// ============================================================
+
+function resetLiveBall() {
+    liveBall.x = CONFIG.width / 2;
+    liveBall.y = CONFIG.height / 2;
+
+    const direction = Math.random() < 0.5 ? -1 : 1;
+
+    liveBall.vx = CONFIG.ballSpeed *
+        (Math.random() < 0.5 ? -0.6 : 0.6);
+
+    liveBall.vy = CONFIG.ballSpeed * direction;
+}
+
+function getLiveState() {
+    return [
+        liveBall.x / CONFIG.width,
+        liveBall.y / CONFIG.height,
+        liveBall.vx / 10,
+        liveBall.vy / 10,
+        (liveBall.x - ai.x) / CONFIG.width
+    ];
+}
+
+function moveAI() {
+    if (!agent || !agent.ready) {
+        const difference = liveBall.x - ai.x;
+
+        ai.x += Math.sign(difference) *
+            Math.min(Math.abs(difference), CONFIG.aiSpeed);
+
+        return;
+    }
+
+    // Inference only. No training or weight updates here.
+    const action = agent.act(getLiveState(), false);
+
+    if (action === 0) ai.x -= CONFIG.aiSpeed;
+    if (action === 2) ai.x += CONFIG.aiSpeed;
+
+    ai.x = Math.max(
+        CONFIG.paddleWidth / 2,
+        Math.min(
+            CONFIG.width - CONFIG.paddleWidth / 2,
+            ai.x
+        )
+    );
+}
+
+function movePlayer() {
+    if (keys.left) {
+        player.x -= CONFIG.playerSpeed;
+    }
+
+    if (keys.right) {
+        player.x += CONFIG.playerSpeed;
+    }
+
+    player.x = Math.max(
+        CONFIG.paddleWidth / 2,
+        Math.min(
+            CONFIG.width - CONFIG.paddleWidth / 2,
+            player.x
+        )
+    );
+}
+
+function moveLive() {
+    moveAI();
+    movePlayer();
+
+    liveBall.x += liveBall.vx;
+    liveBall.y += liveBall.vy;
+
+    // Side walls
+    if (
+        liveBall.x - CONFIG.ballRadius <= 0 ||
+        liveBall.x + CONFIG.ballRadius >= CONFIG.width
+    ) {
+        liveBall.vx *= -1;
+        playWallSound();
+    }
+
+    // AI paddle collision
+    const aiCollision =
+        liveBall.vy < 0 &&
+        liveBall.y - CONFIG.ballRadius <=
+            ai.y + CONFIG.paddleHeight / 2 &&
+        liveBall.y + CONFIG.ballRadius >=
+            ai.y - CONFIG.paddleHeight / 2 &&
+        liveBall.x >=
+            ai.x - CONFIG.paddleWidth / 2 &&
+        liveBall.x <=
+            ai.x + CONFIG.paddleWidth / 2;
+
+    if (aiCollision) {
+        liveBall.vy = Math.abs(liveBall.vy);
+
+        const offset =
+            (liveBall.x - ai.x) /
+            (CONFIG.paddleWidth / 2);
+
+        liveBall.vx = offset * 5;
+
+        playPaddleSound();
+    }
+
+    // Player paddle collision
+    const playerCollision =
+        liveBall.vy > 0 &&
+        liveBall.y + CONFIG.ballRadius >=
+            player.y - CONFIG.paddleHeight / 2 &&
+        liveBall.y - CONFIG.ballRadius <=
+            player.y + CONFIG.paddleHeight / 2 &&
+        liveBall.x >=
+            player.x - CONFIG.paddleWidth / 2 &&
+        liveBall.x <=
+            player.x + CONFIG.paddleWidth / 2;
+
+    if (playerCollision) {
+        liveBall.vy = -Math.abs(liveBall.vy);
+
+        const offset =
+            (liveBall.x - player.x) /
+            (CONFIG.paddleWidth / 2);
+
+        liveBall.vx = offset * 5;
+
+        playPaddleSound();
+    }
+
+    // Player scores when AI misses.
+    if (liveBall.y < -CONFIG.ballRadius) {
+        match.player++;
+
+        playScoreSound();
+        resetLiveBall();
+
+        // Training happens only after a point.
+        trainAfterPoint();
 
         updateGameUI();
+    }
 
-        // Save every 100 additional updates
+    // AI scores when player misses.
+    if (liveBall.y > CONFIG.height + CONFIG.ballRadius) {
+        match.ai++;
 
-        if (
-            agent.updates >= lastSavedUpdate + 100 &&
-            !saving
-        ) {
-            agent.save();
-        }
+        playScoreSound();
+        resetLiveBall();
 
-        // Save statistics periodically
+        // Training happens only after a point.
+        trainAfterPoint();
+
+        updateGameUI();
+    }
+}
+
+// ============================================================
+// 9. DRAWING
+// ============================================================
+
+function drawArena() {
+    const canvas = $("arena");
+    if (!canvas) return;
+
+    const ctx = canvas.getContext("2d");
+
+    if (
+        canvas.width !== CONFIG.width ||
+        canvas.height !== CONFIG.height
+    ) {
+        canvas.width = CONFIG.width;
+        canvas.height = CONFIG.height;
+    }
+
+    ctx.clearRect(0, 0, CONFIG.width, CONFIG.height);
+
+    ctx.fillStyle = "#050505";
+    ctx.fillRect(0, 0, CONFIG.width, CONFIG.height);
+
+    // Center line
+    ctx.strokeStyle = "#333";
+    ctx.lineWidth = 2;
+    ctx.setLineDash([12, 12]);
+
+    ctx.beginPath();
+    ctx.moveTo(0, CONFIG.height / 2);
+    ctx.lineTo(CONFIG.width, CONFIG.height / 2);
+    ctx.stroke();
+
+    ctx.setLineDash([]);
+
+    // AI paddle
+    ctx.fillStyle = "#c7ff4d";
+    ctx.fillRect(
+        ai.x - CONFIG.paddleWidth / 2,
+        ai.y - CONFIG.paddleHeight / 2,
+        CONFIG.paddleWidth,
+        CONFIG.paddleHeight
+    );
+
+    // Player paddle
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(
+        player.x - CONFIG.paddleWidth / 2,
+        player.y - CONFIG.paddleHeight / 2,
+        CONFIG.paddleWidth,
+        CONFIG.paddleHeight
+    );
+
+    // Ball
+    ctx.beginPath();
+    ctx.arc(
+        liveBall.x,
+        liveBall.y,
+        CONFIG.ballRadius,
+        0,
+        Math.PI * 2
+    );
+
+    ctx.fillStyle = "#c7ff4d";
+    ctx.shadowColor = "#c7ff4d";
+    ctx.shadowBlur = 12;
+    ctx.fill();
+    ctx.shadowBlur = 0;
+
+    // Scores
+    ctx.fillStyle = "#c7ff4d";
+    ctx.font = "bold 32px monospace";
+    ctx.textAlign = "center";
+
+    ctx.fillText(
+        match.ai,
+        CONFIG.width / 2,
+        100
+    );
+
+    ctx.fillStyle = "#ffffff";
+
+    ctx.fillText(
+        match.player,
+        CONFIG.width / 2,
+        CONFIG.height - 85
+    );
+
+    // Labels
+    ctx.font = "13px monospace";
+    ctx.fillStyle = "#888";
+
+    ctx.fillText("AI", 55, 40);
+    ctx.fillText("PLAYER", 65, CONFIG.height - 25);
+}
+
+// ============================================================
+// 10. GAME LOOP
+// ============================================================
+
+function gameLoop(now) {
+    if (screen !== "game") return;
+
+    if (!paused) {
+        moveLive();
 
         if (now - lastStatsSave > 5000) {
             saveStats();
@@ -1211,195 +904,442 @@ async function gameLoop(now) {
     raf = requestAnimationFrame(gameLoop);
 }
 
+// ============================================================
+// 11. GAME CONTROL
+// ============================================================
 
-/* ==========================================
-   STATISTICS
-   ========================================== */
+function startMatch() {
+    screen = "game";
+    paused = false;
+    running = true;
 
-function drawStats() {
-
-    const rate = stats.attempts
-        ? 100 * stats.hits / stats.attempts
-        : 0;
-
-    const values = {
-        statMatches: stats.matches.toLocaleString(),
-        statRate: `${rate.toFixed(1)}%`,
-        statTime: formatTime(stats.seconds),
-        statUpdates: agent.updates.toLocaleString(),
-        statExperiences: agent.experiences.toLocaleString(),
-        statEpsilon: agent.epsilon.toFixed(3)
+    match = {
+        player: 0,
+        ai: 0,
+        startTime: Date.now(),
+        duration: 0
     };
 
-    Object.entries(values).forEach(([id, value]) => {
-        setText(id, value);
-    });
+    player.x = CONFIG.width / 2;
+    ai.x = CONFIG.width / 2;
 
-    drawChart();
+    resetLiveBall();
+
+    showScreen("game");
+    hidePauseOverlay();
+
+    playStartSound();
+
+    if (raf) cancelAnimationFrame(raf);
+
+    lastFrameTime = performance.now();
+    raf = requestAnimationFrame(gameLoop);
+
+    updateGameUI();
 }
 
-function drawChart() {
+function pauseGame() {
+    if (screen !== "game") return;
 
+    paused = !paused;
+
+    if (paused) {
+        showPauseOverlay();
+    } else {
+        hidePauseOverlay();
+    }
+
+    updateGameUI();
+}
+
+function endMatch() {
+    if (!running) return;
+
+    running = false;
+    paused = false;
+
+    if (raf) {
+        cancelAnimationFrame(raf);
+        raf = null;
+    }
+
+    match.duration = Math.floor(
+        (Date.now() - match.startTime) / 1000
+    );
+
+    statistics.matches++;
+    statistics.playerPoints += match.player;
+    statistics.aiPoints += match.ai;
+    statistics.totalDuration += match.duration;
+
+    statistics.history.push({
+        player: match.player,
+        ai: match.ai,
+        duration: match.duration,
+        updates: agent ? agent.updates : 0
+    });
+
+    if (statistics.history.length > 30) {
+        statistics.history.shift();
+    }
+
+    saveStats();
+
+    if (agent) {
+        agent.save();
+    }
+
+    playEndSound();
+
+    screen = "menu";
+    showScreen("menu");
+}
+
+function showScreen(name) {
+    const screens = {
+        menu: "menuScreen",
+        game: "gameScreen",
+        stats: "statsScreen"
+    };
+
+    Object.values(screens).forEach(id => {
+        const element = $(id);
+        if (element) element.classList.add("hidden");
+    });
+
+    const target = $(screens[name]);
+
+    if (target) {
+        target.classList.remove("hidden");
+    }
+}
+
+function showPauseOverlay() {
+    const overlay = $("pauseOverlay");
+    if (overlay) overlay.classList.remove("hidden");
+}
+
+function hidePauseOverlay() {
+    const overlay = $("pauseOverlay");
+    if (overlay) overlay.classList.add("hidden");
+}
+
+// ============================================================
+// 12. STATISTICS
+// ============================================================
+
+function getDefenseRate() {
+    const total = statistics.playerPoints + statistics.aiPoints;
+
+    if (total === 0) return 0;
+
+    return (
+        statistics.playerPoints / total
+    ) * 100;
+}
+
+function updateGameUI() {
+    const defenseRate = getDefenseRate();
+
+    const liveRate = $("liveRate");
+    const liveUpdates = $("liveUpdates");
+    const liveSpeed = $("liveSpeed");
+
+    if (liveRate) {
+        liveRate.textContent =
+            `${defenseRate.toFixed(1)}%`;
+    }
+
+    if (liveUpdates) {
+        liveUpdates.textContent =
+            agent ? agent.updates : 0;
+    }
+
+    if (liveSpeed) {
+        liveSpeed.textContent =
+            $("speedSelect")?.value || "NORMAL";
+    }
+
+    const statMatches = $("statMatches");
+    const statRate = $("statRate");
+    const statTime = $("statTime");
+    const statUpdates = $("statUpdates");
+    const statExperiences = $("statExperiences");
+    const statEpsilon = $("statEpsilon");
+
+    if (statMatches) {
+        statMatches.textContent = statistics.matches;
+    }
+
+    if (statRate) {
+        statRate.textContent =
+            `${defenseRate.toFixed(1)}%`;
+    }
+
+    if (statTime) {
+        statTime.textContent =
+            formatTime(statistics.totalDuration);
+    }
+
+    if (statUpdates) {
+        statUpdates.textContent =
+            agent ? agent.updates : 0;
+    }
+
+    if (statExperiences) {
+        statExperiences.textContent =
+            agent ? agent.experiences : 0;
+    }
+
+    if (statEpsilon) {
+        statEpsilon.textContent =
+            agent ? agent.epsilon.toFixed(3) : "1.000";
+    }
+
+    drawStatsChart();
+}
+
+function formatTime(seconds) {
+    const minutes = Math.floor(seconds / 60);
+    const remaining = seconds % 60;
+
+    return `${minutes}m ${remaining}s`;
+}
+
+function saveStats() {
+    try {
+        localStorage.setItem(
+            "pong-statistics",
+            JSON.stringify(statistics)
+        );
+    } catch (error) {
+        console.error("Statistics save failed:", error);
+    }
+}
+
+function loadStats() {
+    try {
+        const saved = localStorage.getItem(
+            "pong-statistics"
+        );
+
+        if (saved) {
+            const parsed = JSON.parse(saved);
+
+            statistics = {
+                ...statistics,
+                ...parsed
+            };
+        }
+    } catch (error) {
+        console.error("Statistics load failed:", error);
+    }
+}
+
+function drawStatsChart() {
     const canvas = $("statsChart");
-
     if (!canvas) return;
 
     const ctx = canvas.getContext("2d");
 
-    if (!ctx) return;
+    const width = canvas.width;
+    const height = canvas.height;
 
-    const w = canvas.width;
-    const h = canvas.height;
+    ctx.clearRect(0, 0, width, height);
 
-    ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = "#080808";
+    ctx.fillRect(0, 0, width, height);
 
-    ctx.font = "13px monospace";
+    const history = statistics.history || [];
 
-    const left = 48;
-    const right = w - 20;
-    const top = 28;
-    const bottom = h - 35;
-
-    ctx.strokeStyle = "#34413b";
-    ctx.fillStyle = "#829087";
-    ctx.lineWidth = 1;
-
-    [0, 25, 50, 75, 100].forEach(value => {
-
-        const y = bottom -
-            (value / 100) * (bottom - top);
-
-        ctx.beginPath();
-        ctx.moveTo(left, y);
-        ctx.lineTo(right, y);
-        ctx.stroke();
+    if (history.length === 0) {
+        ctx.fillStyle = "#777";
+        ctx.font = "14px monospace";
+        ctx.textAlign = "center";
 
         ctx.fillText(
-            value,
-            left - 35,
-            y + 4
-        );
-    });
-
-    const values = stats.history.slice(-20);
-
-    if (!values.length) {
-
-        ctx.fillText(
-            "NO MATCH DATA — PLAY A MATCH FIRST",
-            w / 2 - 160,
-            h / 2
+            "NO MATCH DATA",
+            width / 2,
+            height / 2
         );
 
         return;
     }
 
-    const points = values.map((value, i) => ({
-        x: values.length === 1
-            ? (left + right) / 2
-            : left + i * (right - left) /
-                (values.length - 1),
+    const maxScore = Math.max(
+        1,
+        ...history.map(item =>
+            Math.max(item.player, item.ai)
+        )
+    );
 
-        y: bottom -
-            clamp(value.rate, 0, 100) / 100 *
-            (bottom - top)
-    }));
+    const step = width / Math.max(history.length, 1);
 
     ctx.strokeStyle = "#c7ff4d";
-    ctx.lineWidth = 3;
-
+    ctx.lineWidth = 2;
     ctx.beginPath();
 
-    points.forEach((point, i) => {
+    history.forEach((item, index) => {
+        const x = index * step + step / 2;
+        const y = height - 20 -
+            (item.player / maxScore) * (height - 40);
 
-        if (i === 0) {
-            ctx.moveTo(point.x, point.y);
-
-        } else {
-            ctx.lineTo(point.x, point.y);
-        }
+        if (index === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
     });
 
     ctx.stroke();
 
-    points.forEach(point => {
+    ctx.strokeStyle = "#777";
+    ctx.beginPath();
 
-        ctx.fillStyle = "#edf4e9";
+    history.forEach((item, index) => {
+        const x = index * step + step / 2;
+        const y = height - 20 -
+            (item.ai / maxScore) * (height - 40);
 
-        ctx.fillRect(
-            point.x - 4,
-            point.y - 4,
-            8,
-            8
-        );
+        if (index === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+    });
+
+    ctx.stroke();
+}
+
+// ============================================================
+// 13. MODEL STATUS
+// ============================================================
+
+function updateModelStatus(message) {
+    const element = $("modelStatus");
+
+    if (element) {
+        element.textContent = message;
+    }
+}
+
+// ============================================================
+// 14. INPUT
+// ============================================================
+
+function setupInput() {
+    document.addEventListener("keydown", event => {
+        if (
+            event.key === "ArrowLeft" ||
+            event.key.toLowerCase() === "a"
+        ) {
+            keys.left = true;
+        }
+
+        if (
+            event.key === "ArrowRight" ||
+            event.key.toLowerCase() === "d"
+        ) {
+            keys.right = true;
+        }
+
+        if (event.code === "Space") {
+            event.preventDefault();
+
+            if (screen === "game") {
+                pauseGame();
+            }
+        }
+    });
+
+    document.addEventListener("keyup", event => {
+        if (
+            event.key === "ArrowLeft" ||
+            event.key.toLowerCase() === "a"
+        ) {
+            keys.left = false;
+        }
+
+        if (
+            event.key === "ArrowRight" ||
+            event.key.toLowerCase() === "d"
+        ) {
+            keys.right = false;
+        }
+    });
+
+    document.addEventListener("blur", () => {
+        keys.left = false;
+        keys.right = false;
     });
 }
 
+// ============================================================
+// 15. BUTTONS
+// ============================================================
 
-/* ==========================================
-   PAUSE
-   ========================================== */
+function setupButtons() {
+    $("playBtn")?.addEventListener("click", () => {
+        initAudio();
+        startMatch();
+    });
 
-function togglePause() {
+    $("statsBtn")?.addEventListener("click", () => {
+        initAudio();
+        screen = "stats";
+        showScreen("stats");
+        updateGameUI();
+    });
 
-    if (screen !== "game") return;
+    $("statsBackBtn")?.addEventListener("click", () => {
+        screen = "menu";
+        showScreen("menu");
+    });
 
-    if (!paused) {
+    $("gameMenuBtn")?.addEventListener("click", () => {
+        endMatch();
+    });
 
-        paused = true;
-        match.pauseStarted = performance.now();
+    $("endMatchBtn")?.addEventListener("click", () => {
+        endMatch();
+    });
 
-    } else {
+    $("newMatchBtn")?.addEventListener("click", () => {
+        startMatch();
+    });
 
-        paused = false;
+    $("pauseBtn")?.addEventListener("click", () => {
+        pauseGame();
+    });
 
-        if (match.pauseStarted) {
-            match.pausedDuration +=
-                performance.now() - match.pauseStarted;
+    $("resetStatsBtn")?.addEventListener("click", () => {
+        statistics = {
+            matches: 0,
+            playerPoints: 0,
+            aiPoints: 0,
+            totalDuration: 0,
+            updates: 0,
+            experiences: 0,
+            history: []
+        };
+
+        saveStats();
+        updateGameUI();
+    });
+
+    document.addEventListener("click", event => {
+        const button = event.target.closest("button");
+
+        if (button) {
+            initAudio();
+            playButtonSound();
         }
-
-        match.pauseStarted = null;
-    }
-
-    const overlay = $("pauseOverlay");
-
-    if (overlay) {
-        overlay.classList.toggle(
-            "hidden",
-            !paused
-        );
-    }
-
-    setText(
-        "pauseBtn",
-        paused ? "▶ RESUME" : "Ⅱ PAUSE"
-    );
-
-    if (paused) {
-        playTone(300, 0.08, "square", 0.025);
-    } else {
-        playTone(600, 0.08, "square", 0.025);
-    }
+    }, true);
 }
 
-
-/* ==========================================
-   INITIALIZATION
-   ========================================== */
+// ============================================================
+// 16. INITIALIZATION
+// ============================================================
 
 async function init() {
-
-    stats = loadStats();
-
-    const status = $("modelStatus");
-
-    if (status) {
-        status.textContent = "AI MODEL: LOADING";
-    }
-
     try {
+        updateModelStatus("INITIALIZING AI...");
 
-        // CPU BACKEND
+        // CPU backend avoids WebGL compatibility problems.
         await tf.setBackend("cpu");
         await tf.ready();
 
@@ -1408,198 +1348,31 @@ async function init() {
             tf.getBackend()
         );
 
-        agent = new DQN();
+        loadStats();
 
-        const restored = await agent.load();
+        agent = new DQNAgent();
 
-        envs = new ParallelWorlds(32);
+        await agent.initialize();
 
-        setText(
-            "modelStatus",
-            restored
-                ? "AI MODEL: RESTORED"
-                : "AI MODEL: NEW"
+        envs = new TrainingEnvironments(
+            CONFIG.parallelEnvironments
         );
 
-        console.log(
-            restored
-                ? "Saved AI model restored."
-                : "New AI model initialized."
-        );
+        setupInput();
+        setupButtons();
+
+        showScreen("menu");
+
+        updateModelStatus("AI READY");
+        updateGameUI();
+
+        console.log("Pong AI initialized.");
 
     } catch (error) {
+        console.error("Initialization failed:", error);
 
-        console.error(
-            "AI initialization failed:",
-            error
-        );
-
-        setText(
-            "modelStatus",
-            "AI MODEL: ERROR"
-        );
-
-        return;
+        updateModelStatus("AI INITIALIZATION FAILED");
     }
-
-
-    /* ======================================
-       SOUND INITIALIZATION
-       ====================================== */
-
-    document.addEventListener("click", event => {
-
-        const button = event.target.closest("button");
-
-        if (button) {
-            initAudio();
-            playButtonSound();
-        }
-
-    }, true);
-
-
-    /* ======================================
-       BUTTON EVENTS
-       ====================================== */
-
-    // PLAY
-
-    bind("playBtn", "click", () => {
-
-        newMatch();
-
-        cancelAnimationFrame(raf);
-
-        raf = requestAnimationFrame(gameLoop);
-    });
-
-    // STATISTICS
-
-    bind("statsBtn", "click", () => {
-        show("stats");
-        drawStats();
-    });
-
-    // BACK TO MENU
-
-    bind("statsBackBtn", "click", () => {
-        show("menu");
-    });
-
-    // END MATCH
-
-    bind("gameMenuBtn", "click", finishMatch);
-    bind("endMatchBtn", "click", finishMatch);
-
-    // NEW MATCH
-
-    bind("newMatchBtn", "click", () => {
-
-        if (screen === "game") {
-            finishMatch();
-        }
-
-        newMatch();
-
-        cancelAnimationFrame(raf);
-
-        raf = requestAnimationFrame(gameLoop);
-    });
-
-    // PAUSE
-
-    bind("pauseBtn", "click", togglePause);
-
-    // TRAINING SPEED
-
-    bind("speedSelect", "change", event => {
-
-        const selected = Number(event.target.value);
-
-        if ([1, 5, 10, 20, 50].includes(selected)) {
-            speed = selected;
-        }
-    });
-
-    // RESET DATA
-
-    bind("resetStatsBtn", "click", async () => {
-
-        const confirmed = confirm(
-            "이 브라우저에 저장된 통계와 AI 모델을 모두 초기화할까요?"
-        );
-
-        if (!confirmed) return;
-
-        cancelAnimationFrame(raf);
-
-        try {
-            await tf.io.removeModel(
-                `localstorage://${MODEL_KEY}`
-            );
-
-        } catch (error) {
-            console.log("No saved model to remove.");
-        }
-
-        localStorage.removeItem(STORAGE_KEY);
-        localStorage.removeItem("pong-ai-epsilon");
-        localStorage.removeItem("pong-ai-updates");
-        localStorage.removeItem("pong-ai-experiences");
-
-        location.reload();
-    });
-
-
-    /* ======================================
-       KEYBOARD
-       ====================================== */
-
-    window.addEventListener("keydown", event => {
-
-        keys[event.key] = true;
-
-        if (
-            event.code === "Space" &&
-            screen === "game"
-        ) {
-            event.preventDefault();
-            togglePause();
-        }
-    });
-
-    window.addEventListener("keyup", event => {
-        keys[event.key] = false;
-    });
-
-
-    /* ======================================
-       SAVE ON PAGE EXIT
-       ====================================== */
-
-    window.addEventListener("beforeunload", () => {
-
-        saveStats();
-
-        if (agent && !saving) {
-            agent.save();
-        }
-    });
-
-
-    /* ======================================
-       START APPLICATION
-       ====================================== */
-
-    show("menu");
-
-    console.log("PONG AI ARCADE READY");
 }
 
-
-/* ==========================================
-   START
-   ========================================== */
-
-init();
+document.addEventListener("DOMContentLoaded", init);
