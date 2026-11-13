@@ -1,26 +1,31 @@
 
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="#050505">
+
     <title>PONG AI | Neural Arcade</title>
 
     <link rel="icon" type="image/svg+xml"
         href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%23050505'/%3E%3Crect x='8' y='8' width='48' height='48' rx='8' fill='%23c7ff4d'/%3E%3Ccircle cx='32' cy='32' r='9' fill='%23050505'/%3E%3C/svg%3E">
 
-    <link rel="stylesheet" href="./style.css?v=17">
+    <link rel="stylesheet" href="./style.css?v=18">
 
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js" defer></script>
-    <script src="./game.js?v=17" defer></script>
+    <script
+        src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js"
+        defer>
+    </script>
+
+    <script src="./game.js?v=18" defer></script>
 </head>
 
 <body>
 
     <!-- MAIN MENU -->
     <main id="menuScreen" class="screen menu-screen">
+
         <div class="menu-container">
 
             <div class="logo">
@@ -33,13 +38,21 @@
             </div>
 
             <div class="menu-buttons">
-                <button id="playBtn" class="primary-btn" type="button">
+
+                <button
+                    id="playBtn"
+                    class="primary-btn"
+                    type="button">
                     PLAY GAME
                 </button>
 
-                <button id="statsBtn" class="secondary-btn" type="button">
+                <button
+                    id="statsBtn"
+                    class="secondary-btn"
+                    type="button">
                     STATISTICS
                 </button>
+
             </div>
 
             <div class="menu-footer">
@@ -47,11 +60,15 @@
             </div>
 
         </div>
+
     </main>
 
 
     <!-- GAME SCREEN -->
-    <section id="gameScreen" class="screen game-screen" style="display:none;">
+    <section
+        id="gameScreen"
+        class="screen game-screen"
+        style="display:none;">
 
         <header class="game-header">
 
@@ -61,20 +78,25 @@
 
             <div class="game-controls">
 
-                <button id="pauseBtn" class="secondary-btn" type="button">
+                <button
+                    id="pauseBtn"
+                    class="secondary-btn"
+                    type="button">
                     PAUSE
                 </button>
 
-                <button id="endMatchBtn" class="danger-btn" type="button">
+                <button
+                    id="endMatchBtn"
+                    class="danger-btn"
+                    type="button">
                     END MATCH
                 </button>
 
-                <button id="gameMenuBtn" class="secondary-btn" type="button">
+                <button
+                    id="gameMenuBtn"
+                    class="secondary-btn"
+                    type="button">
                     MENU
-                </button>
-
-                <button id="resetAIProgressBtn" class="secondary-btn" type="button">
-                    RESET AI LEARNING
                 </button>
 
             </div>
@@ -89,14 +111,22 @@
 
                 <div class="score-item ai">
                     <span class="score-label">AI</span>
-                    <span id="aiScoreDisplay" class="score-number">0</span>
+                    <span
+                        id="aiScoreDisplay"
+                        class="score-number">
+                        0
+                    </span>
                 </div>
 
                 <div class="score-divider"></div>
 
                 <div class="score-item player">
                     <span class="score-label">PLAYER</span>
-                    <span id="playerScoreDisplay" class="score-number">0</span>
+                    <span
+                        id="playerScoreDisplay"
+                        class="score-number">
+                        0
+                    </span>
                 </div>
 
             </div>
@@ -112,22 +142,35 @@
                     aria-label="Pong game arena">
                 </canvas>
 
+
                 <!-- PAUSE OVERLAY -->
-                <div id="pauseOverlay" class="pause-overlay" style="display:none;">
+                <div
+                    id="pauseOverlay"
+                    class="pause-overlay"
+                    style="display:none;">
 
                     <div class="pause-content">
 
                         <h2>GAME PAUSED</h2>
 
-                        <button id="resumeBtn" class="primary-btn" type="button">
+                        <button
+                            id="resumeBtn"
+                            class="primary-btn"
+                            type="button">
                             RESUME
                         </button>
 
-                        <button id="newMatchBtn" class="secondary-btn" type="button">
+                        <button
+                            id="newMatchBtn"
+                            class="secondary-btn"
+                            type="button">
                             NEW MATCH
                         </button>
 
-                        <button id="pauseMenuBtn" class="secondary-btn" type="button">
+                        <button
+                            id="pauseMenuBtn"
+                            class="secondary-btn"
+                            type="button">
                             BACK TO MENU
                         </button>
 
@@ -143,22 +186,38 @@
 
                 <div class="metric-card">
                     <span class="metric-label">AI STATUS</span>
-                    <span id="modelStatus" class="metric-value">INITIALIZING</span>
+                    <span
+                        id="modelStatus"
+                        class="metric-value">
+                        INITIALIZING
+                    </span>
                 </div>
 
                 <div class="metric-card">
                     <span class="metric-label">PREDICTION ACCURACY</span>
-                    <span id="liveRate" class="metric-value">0%</span>
+                    <span
+                        id="liveRate"
+                        class="metric-value">
+                        0%
+                    </span>
                 </div>
 
                 <div class="metric-card">
                     <span class="metric-label">AI ATTEMPTS</span>
-                    <span id="liveUpdates" class="metric-value">0</span>
+                    <span
+                        id="liveUpdates"
+                        class="metric-value">
+                        0
+                    </span>
                 </div>
 
                 <div class="metric-card">
                     <span class="metric-label">AI LEVEL</span>
-                    <span id="liveSpeed" class="metric-value">LV.1</span>
+                    <span
+                        id="liveSpeed"
+                        class="metric-value">
+                        LV.1
+                    </span>
                 </div>
 
             </div>
@@ -169,16 +228,24 @@
 
 
     <!-- STATISTICS SCREEN -->
-    <section id="statsScreen" class="screen stats-screen" style="display:none;">
+    <section
+        id="statsScreen"
+        class="screen stats-screen"
+        style="display:none;">
 
         <div class="stats-container">
 
             <header class="stats-header">
+
                 <h1>AI STATISTICS</h1>
 
-                <button id="statsBackBtn" class="secondary-btn" type="button">
+                <button
+                    id="statsBackBtn"
+                    class="secondary-btn"
+                    type="button">
                     BACK
                 </button>
+
             </header>
 
 
@@ -187,32 +254,56 @@
 
                 <div class="stat-card">
                     <span class="stat-label">MATCHES</span>
-                    <span id="statMatches" class="stat-value">0</span>
+                    <span
+                        id="statMatches"
+                        class="stat-value">
+                        0
+                    </span>
                 </div>
 
                 <div class="stat-card">
                     <span class="stat-label">WIN RATE</span>
-                    <span id="statRate" class="stat-value">0%</span>
+                    <span
+                        id="statRate"
+                        class="stat-value">
+                        0%
+                    </span>
                 </div>
 
                 <div class="stat-card">
                     <span class="stat-label">PLAY TIME</span>
-                    <span id="statTime" class="stat-value">0m 0s</span>
+                    <span
+                        id="statTime"
+                        class="stat-value">
+                        0m 0s
+                    </span>
                 </div>
 
                 <div class="stat-card">
                     <span class="stat-label">AI UPDATES</span>
-                    <span id="statUpdates" class="stat-value">0</span>
+                    <span
+                        id="statUpdates"
+                        class="stat-value">
+                        0
+                    </span>
                 </div>
 
                 <div class="stat-card">
                     <span class="stat-label">EXPERIENCES</span>
-                    <span id="statExperiences" class="stat-value">0</span>
+                    <span
+                        id="statExperiences"
+                        class="stat-value">
+                        0
+                    </span>
                 </div>
 
                 <div class="stat-card">
                     <span class="stat-label">EXPLORATION RATE</span>
-                    <span id="statEpsilon" class="stat-value">N/A</span>
+                    <span
+                        id="statEpsilon"
+                        class="stat-value">
+                        N/A
+                    </span>
                 </div>
 
             </div>
@@ -225,19 +316,29 @@
 
                 <canvas
                     id="statsChart"
-                    width="1000"
-                    height="360">
+                    width="900"
+                    height="300">
                 </canvas>
 
-                <div id="chartTooltip" class="chart-tooltip"></div>
+                <div
+                    id="chartTooltip"
+                    class="chart-tooltip">
+                </div>
 
             </div>
 
 
-            <!-- STATISTICS RESET -->
+            <!-- RESET CONTROLS -->
             <div class="stats-controls">
 
                 <div class="stats-reset-actions">
+
+                    <button
+                        id="resetAIProgressBtn"
+                        class="secondary-btn"
+                        type="button">
+                        RESET AI LEARNING
+                    </button>
 
                     <button
                         id="resetStatsBtn"
