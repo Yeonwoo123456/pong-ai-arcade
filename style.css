@@ -1,4 +1,9 @@
 
+/* =====================================================
+   PONG AI - FINAL STYLE
+   Black / White / Green
+===================================================== */
+
 :root {
     --bg: #050505;
     --panel: #101010;
@@ -46,15 +51,16 @@ button:focus-visible {
     background: var(--bg);
 }
 
-/* BUTTONS */
+/* =====================================================
+   BUTTONS
+===================================================== */
 
 .primary-btn,
-.main-btn,
 .secondary-btn,
 .danger-btn {
     display: inline-flex;
-    align-items: center;
     justify-content: center;
+    align-items: center;
     min-height: 50px;
     padding: 14px 20px;
     font-family: inherit;
@@ -65,15 +71,13 @@ button:focus-visible {
     transition: background 0.15s, color 0.15s, border-color 0.15s;
 }
 
-.primary-btn,
-.main-btn {
+.primary-btn {
     color: #050505;
     background: var(--green);
     border: 1px solid var(--green);
 }
 
-.primary-btn:hover,
-.main-btn:hover {
+.primary-btn:hover {
     color: #050505;
     background: var(--white);
     border-color: var(--white);
@@ -101,7 +105,9 @@ button:focus-visible {
     background: #8b2929;
 }
 
-/* MAIN MENU */
+/* =====================================================
+   MAIN MENU
+===================================================== */
 
 #menuScreen {
     display: flex;
@@ -124,15 +130,14 @@ button:focus-visible {
 }
 
 .logo h1 {
+    color: var(--white);
     font-size: clamp(65px, 10vw, 95px);
     font-weight: 900;
     letter-spacing: -7px;
     line-height: 1;
-    color: var(--white);
 }
 
-.logo h1 span,
-.game-title h2 span {
+.logo h1 span {
     color: var(--green);
 }
 
@@ -149,6 +154,7 @@ button:focus-visible {
     color: var(--white);
     font-size: clamp(14px, 2.2vw, 20px);
     line-height: 1.5;
+    text-align: center;
 }
 
 .menu-buttons {
@@ -170,7 +176,9 @@ button:focus-visible {
     letter-spacing: 3px;
 }
 
-/* GAME SCREEN */
+/* =====================================================
+   GAME SCREEN
+===================================================== */
 
 #gameScreen {
     width: 100%;
@@ -190,8 +198,8 @@ button:focus-visible {
     flex: 0 0 auto;
     min-height: 38px;
     display: flex;
-    align-items: center;
     justify-content: space-between;
+    align-items: center;
     flex-wrap: wrap;
     gap: 10px;
     margin: 0;
@@ -202,11 +210,15 @@ button:focus-visible {
     letter-spacing: 2px;
 }
 
+.game-title h2 span {
+    color: var(--green);
+}
+
 .game-controls {
     display: flex;
-    flex-wrap: nowrap;
     justify-content: flex-end;
     align-items: center;
+    flex-wrap: nowrap;
     gap: 7px;
     margin: 0;
 }
@@ -218,25 +230,9 @@ button:focus-visible {
     font-size: 9px;
 }
 
-/* RESET AI BUTTON */
-
-#gameScreen .game-controls #resetAIProgressBtn {
-    color: var(--white);
-    background: transparent;
-    border: 1px solid #555;
-}
-
-#gameScreen .game-controls #resetAIProgressBtn:hover {
-    color: var(--green);
-    border-color: var(--green);
-}
-
-#gameScreen .game-controls #resetAIProgressBtn:disabled {
-    opacity: 0.55;
-    cursor: wait;
-}
-
-/* GAME CONTENT */
+/* =====================================================
+   GAME CONTAINER
+===================================================== */
 
 .game-container {
     width: min(100%, 900px);
@@ -249,7 +245,9 @@ button:focus-visible {
     gap: 7px;
 }
 
-/* SCOREBOARD */
+/* =====================================================
+   SCOREBOARD
+===================================================== */
 
 .scoreboard {
     flex: 0 0 auto;
@@ -257,12 +255,14 @@ button:focus-visible {
     min-height: 48px;
     padding: 5px 12px;
     margin: 0;
+
     display: flex;
     flex-direction: row;
     justify-content: center;
     align-items: center;
     flex-wrap: nowrap;
     gap: clamp(24px, 6vw, 70px);
+
     text-align: center;
     background: var(--panel);
     border: 1px solid var(--border);
@@ -306,7 +306,9 @@ button:focus-visible {
     background: #444;
 }
 
-/* ARENA */
+/* =====================================================
+   GAME ARENA
+===================================================== */
 
 .arena-wrapper {
     position: relative;
@@ -314,6 +316,7 @@ button:focus-visible {
     max-width: 100%;
     flex: 0 1 auto;
     min-height: 0;
+
     display: flex;
     justify-content: center;
     align-items: center;
@@ -331,7 +334,9 @@ button:focus-visible {
     border: 1px solid #333;
 }
 
-/* LIVE AI METRICS */
+/* =====================================================
+   LIVE AI METRICS
+===================================================== */
 
 .live-metrics {
     flex: 0 0 auto;
@@ -346,10 +351,12 @@ button:focus-visible {
     min-width: 0;
     min-height: 48px;
     padding: 6px 8px;
+
     display: flex;
     flex-direction: column;
     justify-content: center;
     gap: 4px;
+
     background: var(--panel);
     border: 1px solid var(--border);
 }
@@ -367,16 +374,20 @@ button:focus-visible {
     overflow-wrap: anywhere;
 }
 
-/* PAUSE OVERLAY */
+/* =====================================================
+   PAUSE OVERLAY
+===================================================== */
 
 #pauseOverlay {
     position: absolute;
     inset: 0;
     z-index: 100;
     padding: 18px;
+
     display: flex;
     justify-content: center;
     align-items: center;
+
     background: rgba(0, 0, 0, 0.88);
 }
 
@@ -402,7 +413,9 @@ button:focus-visible {
     width: 100%;
 }
 
-/* STATISTICS SCREEN */
+/* =====================================================
+   STATISTICS SCREEN
+===================================================== */
 
 #statsScreen {
     display: flex;
@@ -433,7 +446,9 @@ button:focus-visible {
     min-width: 100px;
 }
 
-/* STATISTICS CARDS */
+/* =====================================================
+   STATISTICS CARDS
+===================================================== */
 
 .stats-grid {
     display: grid;
@@ -445,10 +460,12 @@ button:focus-visible {
 .stat-card {
     min-height: 105px;
     padding: 20px;
+
     display: flex;
     flex-direction: column;
     justify-content: center;
     gap: 12px;
+
     background: var(--panel);
     border: 1px solid var(--border);
 }
@@ -466,7 +483,9 @@ button:focus-visible {
     font-variant-numeric: tabular-nums;
 }
 
-/* STATISTICS CHART */
+/* =====================================================
+   STATISTICS CHART
+===================================================== */
 
 .chart-container {
     position: relative;
@@ -475,6 +494,7 @@ button:focus-visible {
     padding: 22px;
     margin-bottom: 20px;
     overflow: hidden;
+
     background: var(--panel);
     border: 1px solid var(--border);
 }
@@ -492,25 +512,36 @@ button:focus-visible {
     aspect-ratio: 1000 / 360;
     min-height: 180px;
     background: #080808;
-    cursor: default;
 }
+
+/* =====================================================
+   CHART TOOLTIP
+===================================================== */
 
 .chart-tooltip {
     display: none;
     position: absolute;
     z-index: 20;
+
     min-width: 175px;
     max-width: 230px;
     padding: 10px 13px;
+
     color: var(--white);
     background: #151515;
     border: 1px solid var(--green);
+
     font-family: "Courier New", monospace;
     font-size: 11px;
     line-height: 1.7;
+
     pointer-events: none;
     box-shadow: 0 4px 15px rgba(0, 0, 0, 0.6);
 }
+
+/* =====================================================
+   STATISTICS RESET BUTTONS
+===================================================== */
 
 .stats-controls {
     width: 100%;
@@ -518,19 +549,53 @@ button:focus-visible {
 }
 
 .stats-reset-actions {
+    width: 100%;
     display: flex;
     flex-wrap: wrap;
     gap: 12px;
-    width: 100%;
 }
 
 .stats-reset-actions button {
     flex: 1 1 220px;
 }
 
-/* RESPONSIVE: TABLET */
+/* AI LEARNING RESET BUTTON */
+
+.stats-reset-actions #resetAIProgressBtn {
+    color: var(--white);
+    background: transparent;
+    border: 1px solid #555;
+}
+
+.stats-reset-actions #resetAIProgressBtn:hover {
+    color: var(--green);
+    border-color: var(--green);
+}
+
+.stats-reset-actions #resetAIProgressBtn:disabled {
+    opacity: 0.55;
+    cursor: wait;
+}
+
+/* STATISTICS RESET BUTTON */
+
+#resetStatsBtn {
+    color: var(--white);
+    background: transparent;
+    border: 1px solid #555;
+}
+
+#resetStatsBtn:hover {
+    color: var(--green);
+    border-color: var(--green);
+}
+
+/* =====================================================
+   RESPONSIVE: TABLET
+===================================================== */
 
 @media (max-width: 700px) {
+
     #menuScreen {
         padding: 20px;
     }
@@ -562,7 +627,10 @@ button:focus-visible {
     }
 
     #gameScreen #arena {
-        width: min(92vw, calc((100vh - 205px) * 900 / 620));
+        width: min(
+            92vw,
+            calc((100vh - 205px) * 900 / 620)
+        );
         height: auto;
         max-height: calc(100vh - 205px);
     }
@@ -596,15 +664,14 @@ button:focus-visible {
         font-size: 10px;
         min-width: 150px;
     }
-
-    #gameScreen .game-controls #resetAIProgressBtn {
-        flex: 1 1 auto;
-    }
 }
 
-/* RESPONSIVE: SMALL SCREENS */
+/* =====================================================
+   RESPONSIVE: SMALL SCREENS
+===================================================== */
 
 @media (max-width: 520px) {
+
     .stats-reset-actions {
         flex-direction: column;
     }
@@ -615,6 +682,7 @@ button:focus-visible {
 }
 
 @media (max-width: 420px) {
+
     .menu-description {
         font-size: 14px;
     }
@@ -630,11 +698,18 @@ button:focus-visible {
     .metric-value {
         font-size: 15px;
     }
+
+    .stats-grid {
+        grid-template-columns: 1fr;
+    }
 }
 
-/* SHORT DESKTOP SCREENS */
+/* =====================================================
+   SHORT DESKTOP SCREENS
+===================================================== */
 
 @media (max-height: 760px) {
+
     #gameScreen {
         gap: 5px;
         padding-top: 5px;
