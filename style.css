@@ -1,9 +1,4 @@
 
-/* =====================================================
-   CLASSIC PONG AI
-   Black / White / Green
-===================================================== */
-
 :root {
     --bg: #050505;
     --panel: #101010;
@@ -40,18 +35,10 @@ button {
     border-radius: 0;
 }
 
-.hidden,
-#menuScreen.hidden,
-#gameScreen.hidden,
-#statsScreen.hidden,
-#pauseOverlay.hidden,
-#chartTooltip.hidden {
-    display: none !important;
+button:focus-visible {
+    outline: 2px solid var(--green);
+    outline-offset: 4px;
 }
-
-/* =====================================================
-   SCREEN LAYOUT
-===================================================== */
 
 .screen {
     width: 100%;
@@ -59,87 +46,35 @@ button {
     background: var(--bg);
 }
 
-/* =====================================================
-   MAIN MENU
-===================================================== */
+/* BUTTONS */
 
-#menuScreen {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    text-align: center;
-    padding: 30px 20px;
-}
-
-.menu-container {
-    width: 100%;
-    max-width: 500px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-}
-
-.logo {
-    margin-bottom: 55px;
-}
-
-.logo-small {
-    display: block;
-    color: var(--green);
-    font-size: 12px;
-    letter-spacing: 5px;
-    margin-bottom: 18px;
-}
-
-.logo h1 {
-    font-family: "Courier New", monospace;
-    font-size: clamp(65px, 10vw, 95px);
-    font-weight: 900;
-    letter-spacing: -7px;
-    line-height: 1;
-    color: var(--white);
-}
-
-.logo h1 span {
-    color: var(--green);
-}
-
-.logo p {
-    color: var(--gray);
-    font-size: 10px;
-    letter-spacing: 3px;
-    margin-top: 20px;
-}
-
-.menu-buttons {
-    width: 280px;
-    display: flex;
-    flex-direction: column;
-    gap: 13px;
-}
-
-/* =====================================================
-   BUTTONS
-===================================================== */
-
+.primary-btn,
 .main-btn,
 .secondary-btn,
 .danger-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     min-height: 50px;
     padding: 14px 20px;
+    font-family: inherit;
     font-size: 13px;
-    font-weight: bold;
+    font-weight: 700;
     letter-spacing: 2px;
-    transition: background 0.15s, color 0.15s;
+    border-radius: 0;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
 }
 
+.primary-btn,
 .main-btn {
-    color: #000;
+    color: #050505;
     background: var(--green);
     border: 1px solid var(--green);
 }
 
+.primary-btn:hover,
 .main-btn:hover {
+    color: #050505;
     background: var(--white);
     border-color: var(--white);
 }
@@ -166,453 +101,54 @@ button {
     background: #8b2929;
 }
 
-/* =====================================================
-   MODEL STATUS
-===================================================== */
+/* MAIN MENU */
 
-.model-information {
+#menuScreen {
     display: flex;
     justify-content: center;
     align-items: center;
-    gap: 10px;
-    margin-top: 35px;
-    color: var(--gray);
-    font-size: 10px;
-    letter-spacing: 1px;
-}
-
-.status-indicator {
-    width: 7px;
-    height: 7px;
-    display: inline-block;
-    background: var(--green);
-    border-radius: 50%;
-}
-
-.controls-information {
-    display: flex;
-    flex-direction: column;
-    gap: 7px;
-    margin-top: 55px;
-    color: #777;
-    font-size: 10px;
-    letter-spacing: 1px;
-}
-
-.controls-information p {
-    color: var(--green);
-    margin-bottom: 5px;
-    font-weight: bold;
-}
-
-/* =====================================================
-   GAME SCREEN
-===================================================== */
-
-#gameScreen {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 20px;
-}
-
-.game-header {
-    width: min(100%, 900px);
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 20px;
-}
-
-.header-label {
-    display: block;
-    color: var(--green);
-    font-size: 9px;
-    letter-spacing: 2px;
-    margin-bottom: 5px;
-}
-
-.game-title h2 {
-    font-size: 20px;
-    letter-spacing: 2px;
-}
-
-.live-statistics {
-    display: flex;
-    gap: 25px;
-}
-
-.live-stat {
-    display: flex;
-    flex-direction: column;
-    gap: 5px;
-}
-
-.live-stat span {
-    color: var(--gray);
-    font-size: 9px;
-    letter-spacing: 1px;
-}
-
-.live-stat strong {
-    color: var(--green);
-    font-size: 16px;
-}
-
-.arena-container {
-    width: 100%;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-}
-
-#arena {
-    display: block;
-    width: min(80vw, 116.13vh);
-    max-width: 900px;
-    max-height: 80vh;
-    height: auto;
-    aspect-ratio: 900 / 620;
-    background: #050505;
-    border: 1px solid #333;
-}
-
-.game-controls {
-    display: flex;
-    justify-content: center;
-    gap: 12px;
-    margin-top: 20px;
-}
-
-.game-controls button {
-    min-width: 120px;
-    min-height: 40px;
-    padding: 10px;
-    font-size: 10px;
-}
-
-/* =====================================================
-   PAUSE OVERLAY
-===================================================== */
-
-#pauseOverlay {
-    position: fixed;
-    inset: 0;
-    z-index: 100;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    background: rgba(0, 0, 0, 0.88);
-}
-
-.overlay-content {
-    width: min(90%, 350px);
-    display: flex;
-    flex-direction: column;
-    gap: 13px;
-    padding: 35px;
     text-align: center;
-    background: #101010;
-    border: 1px solid #444;
+    padding: 30px 20px;
 }
 
-.overlay-content h2 {
-    color: var(--green);
-    font-size: 28px;
-    margin-bottom: 5px;
-}
-
-.overlay-content p {
-    color: var(--gray);
-    font-size: 10px;
-    margin-bottom: 15px;
-}
-
-/* =====================================================
-   STATISTICS
-===================================================== */
-
-#statsScreen {
-    display: flex;
-    justify-content: center;
-    align-items: flex-start;
-    padding: 45px 20px;
-}
-
-.stats-container {
+.menu-container {
     width: 100%;
-    max-width: 950px;
-}
-
-.stats-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 30px;
-}
-
-.stats-header h1 {
-    font-size: 28px;
-    letter-spacing: 2px;
-}
-
-.stats-header button {
-    min-width: 100px;
-}
-
-.stats-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 12px;
-    margin-bottom: 30px;
-}
-
-.stat-card {
-    min-height: 105px;
-    padding: 20px;
+    max-width: 500px;
     display: flex;
     flex-direction: column;
-    justify-content: center;
-    gap: 12px;
-    background: var(--panel);
-    border: 1px solid var(--border);
+    align-items: center;
 }
 
-.stat-card span {
+.logo {
+    margin-bottom: 45px;
+}
+
+.logo h1 {
+    font-size: clamp(65px, 10vw, 95px);
+    font-weight: 900;
+    letter-spacing: -7px;
+    line-height: 1;
+    color: var(--white);
+}
+
+.logo h1 span,
+.game-title h2 span {
+    color: var(--green);
+}
+
+.logo p {
     color: var(--gray);
-    font-size: 9px;
-    letter-spacing: 1px;
-}
-
-.stat-card strong {
-    color: var(--green);
-    font-size: 25px;
-}
-
-/* =====================================================
-   CHART
-===================================================== */
-
-.chart-container {
-    position: relative;
-    padding: 22px;
-    margin-bottom: 20px;
-    background: var(--panel);
-    border: 1px solid var(--border);
-}
-
-.chart-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 20px;
-}
-
-.chart-header h2 {
-    font-size: 12px;
-    letter-spacing: 2px;
-}
-
-.chart-legend {
-    display: flex;
-    gap: 15px;
     font-size: 10px;
-}
-
-.player-legend {
-    color: var(--white);
-}
-
-.ai-legend {
-    color: var(--green);
-}
-
-#statsChart {
-    display: block;
-    width: 100%;
-    height: auto;
-    background: #080808;
-    cursor: default;
-}
-
-/* =====================================================
-   CHART TOOLTIP
-===================================================== */
-
-.chart-tooltip {
-    position: absolute;
-    z-index: 20;
-    min-width: 175px;
-    max-width: 230px;
-    padding: 12px 15px;
-    background: #151515;
-    border: 1px solid var(--green);
-    color: var(--white);
-    font-family: "Courier New", monospace;
-    font-size: 12px;
-    line-height: 1.8;
-    pointer-events: none;
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.6);
-}
-
-.chart-tooltip .tooltip-title {
-    color: var(--green);
-    font-weight: bold;
-    margin-bottom: 5px;
-}
-
-.chart-tooltip .tooltip-player {
-    color: var(--white);
-}
-
-.chart-tooltip .tooltip-ai {
-    color: var(--green);
-}
-
-#resetStatsBtn {
-    width: 100%;
-}
-
-/* =====================================================
-   RESPONSIVE
-===================================================== */
-
-@media (max-width: 700px) {
-    #menuScreen {
-        padding: 20px;
-    }
-
-    .logo h1 {
-        font-size: 65px;
-    }
-
-    .game-header {
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 15px;
-    }
-
-    .live-statistics {
-        width: 100%;
-        justify-content: space-between;
-        gap: 8px;
-    }
-
-    .live-stat span {
-        font-size: 8px;
-    }
-
-    #arena {
-        width: 100%;
-        max-height: none;
-    }
-
-    .game-controls {
-        width: 100%;
-        flex-wrap: wrap;
-    }
-
-    .game-controls button {
-        flex: 1;
-        min-width: 90px;
-        font-size: 8px;
-    }
-
-    .stats-grid {
-        grid-template-columns: repeat(2, 1fr);
-    }
-
-    .stats-header h1 {
-        font-size: 21px;
-    }
-
-    .stat-card {
-        min-height: 90px;
-        padding: 13px;
-    }
-
-    .stat-card strong {
-        font-size: 20px;
-    }
-
-    .chart-container {
-        padding: 12px;
-    }
-
-    .chart-tooltip {
-        font-size: 10px;
-        min-width: 150px;
-    }
-}
-
-@media (max-width: 400px) {
-    .stats-grid {
-        grid-template-columns: 1fr;
-    }
-
-    .menu-buttons {
-        width: 100%;
-        max-width: 280px;
-    }
-}
-
-/* =====================================================
-   HTML COMPATIBILITY + LAYOUT FIXES
-===================================================== */
-
-.primary-btn,
-.main-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-height: 50px;
-    padding: 14px 20px;
-    color: #050505;
-    background: var(--green);
-    border: 1px solid var(--green);
-    border-radius: 0;
-    font: inherit;
-    font-size: 13px;
-    font-weight: 700;
-    letter-spacing: 2px;
-    text-decoration: none;
-    transition: background .15s, color .15s, border-color .15s;
-}
-
-.primary-btn:hover,
-.main-btn:hover {
-    color: #050505;
-    background: #fff;
-    border-color: #fff;
-}
-
-.secondary-btn,
-.danger-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-height: 50px;
-    padding: 14px 20px;
-    font: inherit;
-    font-size: 13px;
-    font-weight: 700;
-    letter-spacing: 2px;
-    border-radius: 0;
-}
-
-button:focus-visible {
-    outline: 2px solid var(--green);
-    outline-offset: 4px;
+    letter-spacing: 3px;
+    margin-top: 20px;
 }
 
 .menu-description {
     width: 100%;
-    margin: 0 0 26px;
+    margin-bottom: 26px;
     color: var(--white);
     font-size: clamp(14px, 2.2vw, 20px);
     line-height: 1.5;
-    text-align: center;
 }
 
 .menu-buttons {
@@ -632,82 +168,131 @@ button:focus-visible {
     color: var(--gray);
     font-size: 11px;
     letter-spacing: 3px;
-    text-align: center;
 }
 
-/* Game layout */
+/* GAME SCREEN */
 
 #gameScreen {
+    width: 100%;
+    height: 100vh;
+    min-height: 0;
+    overflow: hidden;
+    padding: 8px 16px 10px;
     display: flex;
     flex-direction: column;
+    justify-content: flex-start;
     align-items: center;
-    justify-content: center;
-    padding: 20px;
+    gap: 8px;
 }
 
 .game-header {
+    width: min(100%, 900px);
+    flex: 0 0 auto;
+    min-height: 38px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
     flex-wrap: wrap;
-    gap: 14px;
+    gap: 10px;
+    margin: 0;
+}
+
+.game-title h2 {
+    font-size: 17px;
+    letter-spacing: 2px;
 }
 
 .game-controls {
-    margin-top: 0;
+    display: flex;
+    flex-wrap: nowrap;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 7px;
+    margin: 0;
 }
 
 .game-controls button {
-    min-width: 105px;
-    min-height: 42px;
+    min-width: 82px;
+    min-height: 32px;
+    padding: 6px 9px;
+    font-size: 9px;
 }
+
+/* RESET AI BUTTON */
+
+#gameScreen .game-controls #resetAIProgressBtn {
+    color: var(--white);
+    background: transparent;
+    border: 1px solid #555;
+}
+
+#gameScreen .game-controls #resetAIProgressBtn:hover {
+    color: var(--green);
+    border-color: var(--green);
+}
+
+#gameScreen .game-controls #resetAIProgressBtn:disabled {
+    opacity: 0.55;
+    cursor: wait;
+}
+
+/* GAME CONTENT */
 
 .game-container {
     width: min(100%, 900px);
-    margin: 0 auto;
-}
-
-.arena-wrapper {
-    position: relative;
-    width: 100%;
-}
-
-#arena {
-    width: 100%;
     max-width: 900px;
-    max-height: none;
-    height: auto;
-    aspect-ratio: 900 / 620;
-}
-
-.scoreboard {
-    width: 100%;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    gap: clamp(35px, 10vw, 100px);
-    padding: 12px 16px;
-    margin-bottom: 12px;
-    background: #101010;
-    border: 1px solid #292929;
-}
-
-.score-item {
-    min-width: 90px;
+    min-height: 0;
+    margin: 0 auto;
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 5px;
+    gap: 7px;
+}
+
+/* SCOREBOARD */
+
+.scoreboard {
+    flex: 0 0 auto;
+    width: 100%;
+    min-height: 48px;
+    padding: 5px 12px;
+    margin: 0;
+    display: flex;
+    flex-direction: row;
+    justify-content: center;
+    align-items: center;
+    flex-wrap: nowrap;
+    gap: clamp(24px, 6vw, 70px);
+    text-align: center;
+    background: var(--panel);
+    border: 1px solid var(--border);
+}
+
+.score-item {
+    flex: 0 1 120px;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 2px;
+    text-align: center;
 }
 
 .score-label {
     color: var(--gray);
-    font-size: 10px;
+    font-size: 8px;
     letter-spacing: 2px;
 }
 
 .score-number {
+    display: block;
+    width: 100%;
     color: var(--white);
-    font-size: 30px;
-    line-height: 1;
+    font-size: 23px;
     font-weight: 700;
+    line-height: 1.15;
+    text-align: center;
     font-variant-numeric: tabular-nums;
 }
 
@@ -717,49 +302,82 @@ button:focus-visible {
 
 .score-divider {
     width: 1px;
-    height: 42px;
+    height: 30px;
     background: #444;
 }
 
+/* ARENA */
+
+.arena-wrapper {
+    position: relative;
+    width: auto;
+    max-width: 100%;
+    flex: 0 1 auto;
+    min-height: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+#arena {
+    display: block;
+    width: auto;
+    height: min(70vh, 660px);
+    max-width: min(92vw, 900px);
+    max-height: calc(100vh - 185px);
+    aspect-ratio: 900 / 620;
+    object-fit: contain;
+    background: #050505;
+    border: 1px solid #333;
+}
+
+/* LIVE AI METRICS */
+
 .live-metrics {
+    flex: 0 0 auto;
     width: 100%;
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 10px;
-    margin-top: 14px;
+    gap: 7px;
+    margin: 0;
 }
 
 .metric-card {
     min-width: 0;
-    min-height: 75px;
-    padding: 13px 10px;
+    min-height: 48px;
+    padding: 6px 8px;
     display: flex;
     flex-direction: column;
     justify-content: center;
-    gap: 9px;
+    gap: 4px;
     background: var(--panel);
     border: 1px solid var(--border);
 }
 
 .metric-label {
     color: var(--gray);
-    font-size: 9px;
+    font-size: 8px;
     letter-spacing: 1px;
 }
 
 .metric-value {
     color: var(--green);
-    font-size: 17px;
+    font-size: 13px;
     font-weight: 700;
     overflow-wrap: anywhere;
 }
 
-/* Pause overlay */
+/* PAUSE OVERLAY */
 
 #pauseOverlay {
     position: absolute;
     inset: 0;
+    z-index: 100;
     padding: 18px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background: rgba(0, 0, 0, 0.88);
 }
 
 .pause-content {
@@ -769,7 +387,7 @@ button:focus-visible {
     gap: 13px;
     padding: 30px;
     text-align: center;
-    background: #101010;
+    background: var(--panel);
     border: 1px solid #444;
 }
 
@@ -784,16 +402,55 @@ button:focus-visible {
     width: 100%;
 }
 
-/* Statistics layout */
+/* STATISTICS SCREEN */
 
 #statsScreen {
-    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    padding: 45px 20px;
 }
 
 .stats-container {
     width: 100%;
     max-width: 950px;
     margin: 0 auto;
+}
+
+.stats-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 30px;
+}
+
+.stats-header h1 {
+    font-size: 28px;
+    letter-spacing: 2px;
+}
+
+.stats-header button {
+    min-width: 100px;
+}
+
+/* STATISTICS CARDS */
+
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin-bottom: 30px;
+}
+
+.stat-card {
+    min-height: 105px;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 12px;
+    background: var(--panel);
+    border: 1px solid var(--border);
 }
 
 .stat-card .stat-label {
@@ -809,6 +466,19 @@ button:focus-visible {
     font-variant-numeric: tabular-nums;
 }
 
+/* STATISTICS CHART */
+
+.chart-container {
+    position: relative;
+    width: 100%;
+    min-width: 0;
+    padding: 22px;
+    margin-bottom: 20px;
+    overflow: hidden;
+    background: var(--panel);
+    border: 1px solid var(--border);
+}
+
 .chart-container h2 {
     margin-bottom: 18px;
     font-size: 12px;
@@ -816,11 +486,16 @@ button:focus-visible {
 }
 
 #statsChart {
+    display: block;
     width: 100%;
-    height: 300px;
+    height: auto;
+    aspect-ratio: 1000 / 360;
+    min-height: 180px;
+    background: #080808;
+    cursor: default;
 }
 
-#chartTooltip {
+.chart-tooltip {
     display: none;
     position: absolute;
     z-index: 20;
@@ -830,9 +505,11 @@ button:focus-visible {
     color: var(--white);
     background: #151515;
     border: 1px solid var(--green);
+    font-family: "Courier New", monospace;
     font-size: 11px;
     line-height: 1.7;
     pointer-events: none;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.6);
 }
 
 .stats-controls {
@@ -840,26 +517,100 @@ button:focus-visible {
     margin-top: 18px;
 }
 
+.stats-reset-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    width: 100%;
+}
+
+.stats-reset-actions button {
+    flex: 1 1 220px;
+}
+
+/* RESPONSIVE: TABLET */
+
 @media (max-width: 700px) {
-    .live-metrics {
+    #menuScreen {
+        padding: 20px;
+    }
+
+    .logo h1 {
+        font-size: 65px;
+    }
+
+    #gameScreen {
+        padding-left: 8px;
+        padding-right: 8px;
+    }
+
+    #gameScreen .game-header {
+        align-items: center;
+    }
+
+    #gameScreen .game-controls {
+        width: 100%;
+        flex-wrap: wrap;
+        justify-content: flex-start;
+    }
+
+    #gameScreen .game-controls button {
+        min-width: 0;
+        flex: 1 1 auto;
+        padding: 6px 7px;
+        font-size: 8px;
+    }
+
+    #gameScreen #arena {
+        width: min(92vw, calc((100vh - 205px) * 900 / 620));
+        height: auto;
+        max-height: calc(100vh - 205px);
+    }
+
+    #gameScreen .live-metrics {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
-    .game-controls {
+    .stats-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .stats-header h1 {
+        font-size: 21px;
+    }
+
+    .stat-card {
+        min-height: 90px;
+        padding: 13px;
+    }
+
+    .stat-card .stat-value {
+        font-size: 20px;
+    }
+
+    .chart-container {
+        padding: 12px;
+    }
+
+    .chart-tooltip {
+        font-size: 10px;
+        min-width: 150px;
+    }
+
+    #gameScreen .game-controls #resetAIProgressBtn {
+        flex: 1 1 auto;
+    }
+}
+
+/* RESPONSIVE: SMALL SCREENS */
+
+@media (max-width: 520px) {
+    .stats-reset-actions {
+        flex-direction: column;
+    }
+
+    .stats-reset-actions button {
         width: 100%;
-        flex-wrap: wrap;
-    }
-
-    .game-controls button {
-        flex: 1 1 100px;
-    }
-
-    .score-number {
-        font-size: 25px;
-    }
-
-    .stats-container {
-        max-width: 100%;
     }
 }
 
@@ -881,139 +632,18 @@ button:focus-visible {
     }
 }
 
-/* =====================================================
-   COMPACT FULL-VIEWPORT GAME LAYOUT
-===================================================== */
-
-#gameScreen {
-    width: 100%;
-    height: 100vh;
-    min-height: 0;
-    overflow: hidden;
-    padding: 8px 16px 10px;
-    display: flex;
-    flex-direction: column;
-    justify-content: flex-start;
-    align-items: center;
-    gap: 8px;
-}
-
-#gameScreen .game-header {
-    width: min(100%, 900px);
-    flex: 0 0 auto;
-    min-height: 38px;
-    margin: 0;
-    gap: 10px;
-}
-
-#gameScreen .game-title h2 {
-    font-size: 17px;
-}
-
-#gameScreen .game-controls {
-    display: flex;
-    flex-wrap: nowrap;
-    justify-content: flex-end;
-    gap: 7px;
-    margin: 0;
-}
-
-#gameScreen .game-controls button {
-    min-width: 82px;
-    min-height: 32px;
-    padding: 6px 9px;
-    font-size: 9px;
-}
-
-#gameScreen .game-container {
-    width: min(100%, 900px);
-    max-width: 900px;
-    min-height: 0;
-    margin: 0 auto;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 7px;
-}
-
-#gameScreen .scoreboard {
-    flex: 0 0 auto;
-    width: min(100%, 900px);
-    min-height: 48px;
-    padding: 5px 12px;
-    margin: 0;
-    gap: clamp(24px, 6vw, 70px);
-}
-
-#gameScreen .score-item {
-    min-width: 65px;
-    gap: 2px;
-}
-
-#gameScreen .score-label {
-    font-size: 8px;
-}
-
-#gameScreen .score-number {
-    font-size: 23px;
-}
-
-#gameScreen .score-divider {
-    height: 30px;
-}
-
-#gameScreen .arena-wrapper {
-    width: auto;
-    max-width: 100%;
-    flex: 0 1 auto;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    min-height: 0;
-}
-
-#gameScreen #arena {
-    display: block;
-    width: auto;
-    height: min(66vh, 620px);
-    max-width: min(92vw, 900px);
-    max-height: calc(100vh - 205px);
-    aspect-ratio: 900 / 620;
-    object-fit: contain;
-}
-
-#gameScreen .live-metrics {
-    flex: 0 0 auto;
-    width: min(100%, 900px);
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 7px;
-    margin: 0;
-}
-
-#gameScreen .metric-card {
-    min-height: 48px;
-    padding: 6px 8px;
-    gap: 4px;
-}
-
-#gameScreen .metric-label {
-    font-size: 8px;
-}
-
-#gameScreen .metric-value {
-    font-size: 13px;
-}
+/* SHORT DESKTOP SCREENS */
 
 @media (max-height: 760px) {
-    #gameScreen #arena {
-        height: min(61vh, 500px);
-        max-height: calc(100vh - 190px);
-    }
-
     #gameScreen {
         gap: 5px;
         padding-top: 5px;
         padding-bottom: 5px;
+    }
+
+    #gameScreen #arena {
+        height: min(65vh, 540px);
+        max-height: calc(100vh - 175px);
     }
 
     #gameScreen .scoreboard {
@@ -1022,85 +652,5 @@ button:focus-visible {
 
     #gameScreen .metric-card {
         min-height: 42px;
-    }
-}
-
-@media (max-width: 700px) {
-    #gameScreen {
-        padding-left: 8px;
-        padding-right: 8px;
-    }
-
-    #gameScreen .game-header {
-        align-items: center;
-    }
-
-    #gameScreen .game-controls button {
-        min-width: 0;
-        flex: 0 1 auto;
-        padding: 6px 7px;
-        font-size: 8px;
-    }
-
-    #gameScreen #arena {
-        width: min(92vw, calc((100vh - 205px) * 900 / 620));
-        height: auto;
-        max-height: calc(100vh - 205px);
-    }
-
-    #gameScreen .live-metrics {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-}
-
-/* =====================================================
-   FINAL PATCH: LARGER ARENA + RELIABLE STATISTICS CHART
-===================================================== */
-
-#gameScreen #arena {
-    height: min(70vh, 660px);
-    max-height: calc(100vh - 185px);
-}
-
-@media (max-height: 760px) {
-    #gameScreen #arena {
-        height: min(65vh, 540px);
-        max-height: calc(100vh - 175px);
-    }
-}
-
-.chart-container {
-    width: 100%;
-    min-width: 0;
-    overflow: hidden;
-}
-
-#statsChart {
-    display: block;
-    width: 100%;
-    height: auto;
-    aspect-ratio: 1000 / 360;
-    min-height: 180px;
-    background: #080808;
-}
-
-.stats-reset-actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 12px;
-    width: 100%;
-}
-
-.stats-reset-actions button {
-    flex: 1 1 220px;
-}
-
-@media (max-width: 520px) {
-    .stats-reset-actions {
-        flex-direction: column;
-    }
-
-    .stats-reset-actions button {
-        width: 100%;
     }
 }
