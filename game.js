@@ -11,33 +11,32 @@ const CONFIG = {
 
     paddleWidth: 125,
     paddleHeight: 13,
-    playerSpeed: 8,
-
     ballRadius: 9,
+
+    playerSpeed: 8,
+    aiSpeed: 7.5,
     ballSpeed: 5,
 
-    aiSpeed: 6.5,
-
-    parallelEnvironments: 32,
-
     replayCapacity: 12000,
-    batchSize: 64,
+    batchSize: 32,
 
     gamma: 0.97,
     learningRate: 0.0005,
 
-    epsilonStart: 1.0,
-    epsilonMin: 0.05,
-    epsilonDecay: 0.995,
+    epsilonStart: 0.25,
+    epsilonMin: 0.03,
+    epsilonDecay: 0.997,
 
     targetUpdateFrequency: 10,
+    saveFrequency: 10,
 
-    saveFrequency: 10
+    learnedAIStart: 10,
+    maxAIAdjustment: 18
 };
 
-const MODEL_KEY = "pong-dqn-model-v3";
-
+const MODEL_KEY = "pong-dqn-model-v4";
 const $ = id => document.getElementById(id);
+
 
 // ============================================================
 // 2. GLOBAL STATE
@@ -48,10 +47,8 @@ let paused = false;
 let running = false;
 
 let raf = null;
-let lastFrameTime = 0;
 
 let agent = null;
-let envs = null;
 
 let saving = false;
 let trainingInProgress = false;
@@ -79,8 +76,6 @@ let statistics = {
     playerPoints: 0,
     aiPoints: 0,
     totalDuration: 0,
-    updates: 0,
-    experiences: 0,
     history: []
 };
 
@@ -101,26 +96,39 @@ let ai = {
     y: 35
 };
 
+let lastAIState = null;
+let lastAIAction = 1;
+
+
 // ============================================================
-// 3. AUDIO SYSTEM
+// 3. AUDIO
 // ============================================================
 
 function initAudio() {
     if (!audioContext) {
         const AudioContextClass =
-            window.AudioContext || window.webkitAudioContext;
+            window.AudioContext ||
+            window.webkitAudioContext;
 
         if (AudioContextClass) {
             audioContext = new AudioContextClass();
         }
     }
 
-    if (audioContext && audioContext.state === "suspended") {
+    if (
+        audioContext &&
+        audioContext.state === "suspended"
+    ) {
         audioContext.resume();
     }
 }
 
-function playTone(frequency, duration, volume = 0.05, type = "square") {
+function playTone(
+    frequency,
+    duration,
+    volume = 0.04,
+    type = "square"
+) {
     if (!audioContext) return;
 
     const oscillator = audioContext.createOscillator();
@@ -129,7 +137,11 @@ function playTone(frequency, duration, volume = 0.05, type = "square") {
     oscillator.type = type;
     oscillator.frequency.value = frequency;
 
-    gain.gain.setValueAtTime(volume, audioContext.currentTime);
+    gain.gain.setValueAtTime(
+        volume,
+        audioContext.currentTime
+    );
+
     gain.gain.exponentialRampToValueAtTime(
         0.001,
         audioContext.currentTime + duration
@@ -156,18 +168,28 @@ function playPaddleSound() {
 
 function playScoreSound() {
     playTone(520, 0.12, 0.05);
-    setTimeout(() => playTone(780, 0.15, 0.04), 100);
+
+    setTimeout(() => {
+        playTone(780, 0.15, 0.04);
+    }, 100);
 }
 
 function playStartSound() {
     playTone(440, 0.1);
-    setTimeout(() => playTone(660, 0.1), 100);
+
+    setTimeout(() => {
+        playTone(660, 0.1);
+    }, 100);
 }
 
 function playEndSound() {
     playTone(300, 0.2);
-    setTimeout(() => playTone(200, 0.25), 180);
+
+    setTimeout(() => {
+        playTone(200, 0.25);
+    }, 180);
 }
+
 
 // ============================================================
 // 4. REPLAY MEMORY
@@ -195,7 +217,8 @@ class ReplayMemory {
             this.memory[this.position] = experience;
         }
 
-        this.position = (this.position + 1) % this.capacity;
+        this.position =
+            (this.position + 1) % this.capacity;
     }
 
     sample(batchSize) {
@@ -217,13 +240,16 @@ class ReplayMemory {
     }
 }
 
+
 // ============================================================
 // 5. DQN AGENT
 // ============================================================
 
 class DQNAgent {
     constructor() {
-        this.memory = new ReplayMemory(CONFIG.replayCapacity);
+        this.memory = new ReplayMemory(
+            CONFIG.replayCapacity
+        );
 
         this.epsilon = CONFIG.epsilonStart;
         this.updates = 0;
@@ -263,30 +289,42 @@ class DQNAgent {
     }
 
     async initialize() {
-        this.model = this.createModel();
-        this.target = this.createModel();
-
         try {
-            await this.model.loadWeights(
+            this.model = await tf.loadLayersModel(
                 `localstorage://${MODEL_KEY}`
             );
+
+            console.log("Previous AI model loaded.");
+
         } catch (error) {
-            console.log("No previous model found. Starting fresh.");
+            console.log("Creating a new AI model.");
+
+            this.model = this.createModel();
         }
 
+        this.target = this.createModel();
         this.copyWeights();
 
-        this.epsilon = Number(
+        const epsilon = Number(
             localStorage.getItem("pong-ai-epsilon")
-        ) || CONFIG.epsilonStart;
+        );
 
-        this.updates = Number(
+        const updates = Number(
             localStorage.getItem("pong-ai-updates")
-        ) || 0;
+        );
 
-        this.experiences = Number(
+        const experiences = Number(
             localStorage.getItem("pong-ai-experiences")
-        ) || 0;
+        );
+
+        if (Number.isFinite(epsilon) && epsilon > 0) {
+            this.epsilon = epsilon;
+        }
+
+        this.updates = Number.isFinite(updates) ? updates : 0;
+        this.experiences = Number.isFinite(experiences)
+            ? experiences
+            : 0;
 
         this.ready = true;
 
@@ -309,13 +347,15 @@ class DQNAgent {
     act(state, training = false) {
         if (!this.ready || !this.model) return 1;
 
-        if (training && Math.random() < this.epsilon) {
+        if (
+            training &&
+            Math.random() < this.epsilon
+        ) {
             return Math.floor(Math.random() * 3);
         }
 
         return tf.tidy(() => {
             const input = tf.tensor2d([state]);
-
             const prediction = this.model.predict(input);
 
             return prediction.argMax(1).dataSync()[0];
@@ -351,62 +391,71 @@ class DQNAgent {
         const rewards = batch.map(item => item.reward);
         const dones = batch.map(item => item.done);
 
-        const stateTensor = tf.tensor2d(states);
-        const nextTensor = tf.tensor2d(nextStates);
+        let stateTensor;
+        let nextTensor;
+        let currentQ;
+        let nextQ;
+        let targetTensor;
 
-        const currentQ = this.model.predict(stateTensor);
-        const nextQ = this.target.predict(nextTensor);
+        try {
+            stateTensor = tf.tensor2d(states);
+            nextTensor = tf.tensor2d(nextStates);
 
-        const currentValues = await currentQ.array();
-        const nextValues = await nextQ.array();
+            currentQ = this.model.predict(stateTensor);
+            nextQ = this.target.predict(nextTensor);
 
-        const targets = currentValues.map((values, i) => {
-            const nextMax = Math.max(...nextValues[i]);
+            const currentValues = await currentQ.array();
+            const nextValues = await nextQ.array();
 
-            const targetValue = dones[i]
-                ? rewards[i]
-                : rewards[i] + CONFIG.gamma * nextMax;
+            const targets = currentValues.map((values, i) => {
+                const nextMax = Math.max(...nextValues[i]);
 
-            const updated = [...values];
-            updated[actions[i]] = targetValue;
+                const targetValue = dones[i]
+                    ? rewards[i]
+                    : rewards[i] + CONFIG.gamma * nextMax;
 
-            return updated;
-        });
+                const updated = [...values];
+                updated[actions[i]] = targetValue;
 
-        const targetTensor = tf.tensor2d(targets);
+                return updated;
+            });
 
-        await this.model.fit(
-            stateTensor,
-            targetTensor,
-            {
-                epochs: 1,
-                batchSize: CONFIG.batchSize,
-                verbose: 0
+            targetTensor = tf.tensor2d(targets);
+
+            await this.model.fit(
+                stateTensor,
+                targetTensor,
+                {
+                    epochs: 1,
+                    batchSize: CONFIG.batchSize,
+                    verbose: 0
+                }
+            );
+
+            this.updates++;
+
+            this.epsilon = Math.max(
+                CONFIG.epsilonMin,
+                this.epsilon * CONFIG.epsilonDecay
+            );
+
+            if (
+                this.updates % CONFIG.targetUpdateFrequency === 0
+            ) {
+                this.copyWeights();
             }
-        );
 
-        tf.dispose([
-            stateTensor,
-            nextTensor,
-            currentQ,
-            nextQ,
-            targetTensor
-        ]);
+            return true;
 
-        this.updates++;
-
-        this.epsilon = Math.max(
-            CONFIG.epsilonMin,
-            this.epsilon * CONFIG.epsilonDecay
-        );
-
-        if (
-            this.updates % CONFIG.targetUpdateFrequency === 0
-        ) {
-            this.copyWeights();
+        } finally {
+            tf.dispose([
+                stateTensor,
+                nextTensor,
+                currentQ,
+                nextQ,
+                targetTensor
+            ].filter(Boolean));
         }
-
-        return true;
     }
 
     async save() {
@@ -436,11 +485,7 @@ class DQNAgent {
 
             lastSavedUpdate = this.updates;
 
-            console.log(
-                "AI model saved.",
-                "Updates:",
-                this.updates
-            );
+            console.log("AI model saved:", this.updates);
 
         } catch (error) {
             console.error("Model save failed:", error);
@@ -451,197 +496,10 @@ class DQNAgent {
     }
 }
 
-// ============================================================
-// 6. TRAINING ENVIRONMENTS
-// ============================================================
-
-class TrainingEnvironments {
-    constructor(count) {
-        this.count = count;
-
-        this.worlds = Array.from(
-            { length: count },
-            () => this.createWorld()
-        );
-    }
-
-    createWorld() {
-        return {
-            ballX: CONFIG.width / 2,
-            ballY: CONFIG.height / 2,
-
-            vx: (Math.random() < 0.5 ? -1 : 1) *
-                CONFIG.ballSpeed,
-
-            vy: CONFIG.ballSpeed,
-
-            aiX: CONFIG.width / 2,
-            playerX: CONFIG.width / 2,
-
-            done: false
-        };
-    }
-
-    state(index) {
-        const world = this.worlds[index];
-
-        return [
-            world.ballX / CONFIG.width,
-            world.ballY / CONFIG.height,
-            world.vx / 10,
-            world.vy / 10,
-            (world.ballX - world.aiX) / CONFIG.width
-        ];
-    }
-
-    step(actions) {
-        const transitions = [];
-
-        for (let i = 0; i < this.count; i++) {
-            const world = this.worlds[i];
-
-            const oldState = this.state(i);
-
-            const action = actions[i];
-
-            // 0 = left, 1 = stay, 2 = right
-            if (action === 0) world.aiX -= CONFIG.aiSpeed;
-            if (action === 2) world.aiX += CONFIG.aiSpeed;
-
-            world.aiX = Math.max(
-                CONFIG.paddleWidth / 2,
-                Math.min(
-                    CONFIG.width - CONFIG.paddleWidth / 2,
-                    world.aiX
-                )
-            );
-
-            world.ballX += world.vx;
-            world.ballY += world.vy;
-
-            let reward = 0;
-            let done = false;
-
-            if (
-                world.ballX <= CONFIG.ballRadius ||
-                world.ballX >= CONFIG.width - CONFIG.ballRadius
-            ) {
-                world.vx *= -1;
-            }
-
-            const aiHit =
-                world.vy < 0 &&
-                world.ballY - CONFIG.ballRadius <=
-                    CONFIG.paddleHeight + 42 &&
-                world.ballX >=
-                    world.aiX - CONFIG.paddleWidth / 2 &&
-                world.ballX <=
-                    world.aiX + CONFIG.paddleWidth / 2;
-
-            if (aiHit) {
-                world.vy = Math.abs(world.vy);
-                reward = 1;
-            }
-
-            if (world.ballY > CONFIG.height) {
-                reward = -1;
-                done = true;
-            }
-
-            if (world.ballY < 0) {
-                reward = 1;
-                done = true;
-            }
-
-            const nextState = this.state(i);
-
-            transitions.push([
-                oldState,
-                action,
-                reward,
-                nextState,
-                done
-            ]);
-
-            if (done) {
-                this.worlds[i] = this.createWorld();
-            }
-        }
-
-        return transitions;
-    }
-}
 
 // ============================================================
-// 7. POINT-BASED TRAINING
+// 6. AI PREDICTION
 // ============================================================
-
-async function trainAfterPoint() {
-    if (!agent || !envs || !agent.ready) return;
-
-    // Queue scoring events instead of dropping them.
-    pendingTrainingEvents++;
-
-    if (trainingInProgress) return;
-
-    trainingInProgress = true;
-
-    try {
-        while (pendingTrainingEvents > 0) {
-            pendingTrainingEvents--;
-
-            // Collect one batch of experiences from parallel worlds.
-            const states = envs.worlds.map(
-                (_, index) => envs.state(index)
-            );
-
-            const actions = states.map(
-                state => agent.act(state, true)
-            );
-
-            const transitions = envs.step(actions);
-
-            transitions.forEach(transition => {
-                agent.remember(...transition);
-            });
-
-            // Exactly one DQN update for this scoring event.
-            await agent.learnOnce();
-
-            updateGameUI();
-
-            if (
-                agent.updates > 0 &&
-                agent.updates >= lastSavedUpdate + CONFIG.saveFrequency
-            ) {
-                await agent.save();
-            }
-        }
-
-    } catch (error) {
-        console.error("Point training failed:", error);
-
-    } finally {
-        trainingInProgress = false;
-        updateGameUI();
-    }
-}
-
-// ============================================================
-// 8. LIVE GAME
-// ============================================================
-
-function resetLiveBall() {
-    liveBall.x = CONFIG.width / 2;
-    liveBall.y = CONFIG.height / 2;
-
-    const direction = Math.random() < 0.5 ? -1 : 1;
-
-    liveBall.vx = CONFIG.ballSpeed *
-        (Math.random() < 0.5 ? -0.6 : 0.6);
-
-    liveBall.vy = CONFIG.ballSpeed * direction;
-}
 
 function getLiveState() {
     return [
@@ -653,21 +511,81 @@ function getLiveState() {
     ];
 }
 
-function moveAI() {
-    if (!agent || !agent.ready) {
-        const difference = liveBall.x - ai.x;
+function predictBallXAtY(targetY) {
+    const minX = CONFIG.ballRadius;
+    const maxX = CONFIG.width - CONFIG.ballRadius;
+    const range = maxX - minX;
 
-        ai.x += Math.sign(difference) *
-            Math.min(Math.abs(difference), CONFIG.aiSpeed);
-
-        return;
+    if (liveBall.vy >= 0) {
+        return CONFIG.width / 2;
     }
 
-    // Inference only. No training or weight updates here.
-    const action = agent.act(getLiveState(), false);
+    const time =
+        (targetY - liveBall.y) / liveBall.vy;
 
-    if (action === 0) ai.x -= CONFIG.aiSpeed;
-    if (action === 2) ai.x += CONFIG.aiSpeed;
+    if (time <= 0) {
+        return liveBall.x;
+    }
+
+    const projectedX =
+        liveBall.x + liveBall.vx * time;
+
+    const period = range * 2;
+
+    let position =
+        (projectedX - minX) % period;
+
+    if (position < 0) {
+        position += period;
+    }
+
+    if (position > range) {
+        position = period - position;
+    }
+
+    return minX + position;
+}
+
+function moveAI() {
+    const state = getLiveState();
+
+    const targetY =
+        ai.y +
+        CONFIG.paddleHeight / 2 +
+        CONFIG.ballRadius;
+
+    let targetX = predictBallXAtY(targetY);
+
+    // Basic predictive controller.
+    const difference = targetX - ai.x;
+
+    let action = 1;
+
+    if (difference < -5) action = 0;
+    if (difference > 5) action = 2;
+
+    // DQN gradually adjusts the prediction.
+    if (
+        agent &&
+        agent.ready &&
+        agent.updates >= CONFIG.learnedAIStart
+    ) {
+        const learnedAction = agent.act(state, false);
+
+        targetX +=
+            (learnedAction - 1) *
+            CONFIG.maxAIAdjustment;
+    }
+
+    lastAIState = [...state];
+    lastAIAction = action;
+
+    const movement = Math.max(
+        -CONFIG.aiSpeed,
+        Math.min(CONFIG.aiSpeed, targetX - ai.x)
+    );
+
+    ai.x += movement;
 
     ai.x = Math.max(
         CONFIG.paddleWidth / 2,
@@ -676,6 +594,97 @@ function moveAI() {
             ai.x
         )
     );
+}
+
+
+// ============================================================
+// 7. REAL GAME EXPERIENCE
+// ============================================================
+
+function recordAIExperience(reward, done = false) {
+    if (
+        !agent ||
+        !agent.ready ||
+        !lastAIState
+    ) {
+        return;
+    }
+
+    const nextState = getLiveState();
+
+    agent.remember(
+        lastAIState,
+        lastAIAction,
+        reward,
+        nextState,
+        done
+    );
+
+    lastAIState = null;
+}
+
+
+// ============================================================
+// 8. TRAIN AFTER SCORING
+// ============================================================
+
+async function trainAfterPoint() {
+    if (!agent || !agent.ready) return;
+
+    pendingTrainingEvents++;
+
+    if (trainingInProgress) return;
+
+    trainingInProgress = true;
+
+    try {
+        while (pendingTrainingEvents > 0) {
+            pendingTrainingEvents--;
+
+            await agent.learnOnce();
+
+            updateGameUI();
+
+            if (
+                agent.updates > 0 &&
+                agent.updates >=
+                    lastSavedUpdate + CONFIG.saveFrequency
+            ) {
+                await agent.save();
+            }
+        }
+
+    } catch (error) {
+        console.error("Training failed:", error);
+
+    } finally {
+        trainingInProgress = false;
+        updateGameUI();
+    }
+}
+
+
+// ============================================================
+// 9. BALL AND PLAYER MOVEMENT
+// ============================================================
+
+function resetLiveBall() {
+    liveBall.x = CONFIG.width / 2;
+    liveBall.y = CONFIG.height / 2;
+
+    const horizontalDirection =
+        Math.random() < 0.5 ? -1 : 1;
+
+    const verticalDirection =
+        Math.random() < 0.5 ? -1 : 1;
+
+    liveBall.vx =
+        horizontalDirection * CONFIG.ballSpeed * 0.6;
+
+    liveBall.vy =
+        verticalDirection * CONFIG.ballSpeed;
+
+    lastAIState = null;
 }
 
 function movePlayer() {
@@ -696,6 +705,11 @@ function movePlayer() {
     );
 }
 
+
+// ============================================================
+// 10. LIVE GAME PHYSICS
+// ============================================================
+
 function moveLive() {
     moveAI();
     movePlayer();
@@ -703,7 +717,7 @@ function moveLive() {
     liveBall.x += liveBall.vx;
     liveBall.y += liveBall.vy;
 
-    // Side walls
+    // Side walls.
     if (
         liveBall.x - CONFIG.ballRadius <= 0 ||
         liveBall.x + CONFIG.ballRadius >= CONFIG.width
@@ -712,7 +726,7 @@ function moveLive() {
         playWallSound();
     }
 
-    // AI paddle collision
+    // AI paddle.
     const aiCollision =
         liveBall.vy < 0 &&
         liveBall.y - CONFIG.ballRadius <=
@@ -733,10 +747,12 @@ function moveLive() {
 
         liveBall.vx = offset * 5;
 
+        recordAIExperience(1, false);
+
         playPaddleSound();
     }
 
-    // Player paddle collision
+    // Player paddle.
     const playerCollision =
         liveBall.vy > 0 &&
         liveBall.y + CONFIG.ballRadius >=
@@ -760,35 +776,34 @@ function moveLive() {
         playPaddleSound();
     }
 
-    // Player scores when AI misses.
+    // Player scores.
     if (liveBall.y < -CONFIG.ballRadius) {
         match.player++;
+
+        recordAIExperience(-1, true);
 
         playScoreSound();
         resetLiveBall();
 
-        // Training happens only after a point.
         trainAfterPoint();
-
         updateGameUI();
     }
 
-    // AI scores when player misses.
+    // AI scores.
     if (liveBall.y > CONFIG.height + CONFIG.ballRadius) {
         match.ai++;
 
         playScoreSound();
         resetLiveBall();
 
-        // Training happens only after a point.
         trainAfterPoint();
-
         updateGameUI();
     }
 }
 
+
 // ============================================================
-// 9. DRAWING
+// 11. DRAW GAME
 // ============================================================
 
 function drawArena() {
@@ -797,21 +812,13 @@ function drawArena() {
 
     const ctx = canvas.getContext("2d");
 
-    if (
-        canvas.width !== CONFIG.width ||
-        canvas.height !== CONFIG.height
-    ) {
-        canvas.width = CONFIG.width;
-        canvas.height = CONFIG.height;
-    }
-
     ctx.clearRect(0, 0, CONFIG.width, CONFIG.height);
 
     ctx.fillStyle = "#050505";
     ctx.fillRect(0, 0, CONFIG.width, CONFIG.height);
 
-    // Center line
-    ctx.strokeStyle = "#333";
+    // Center line.
+    ctx.strokeStyle = "#333333";
     ctx.lineWidth = 2;
     ctx.setLineDash([12, 12]);
 
@@ -822,8 +829,9 @@ function drawArena() {
 
     ctx.setLineDash([]);
 
-    // AI paddle
+    // AI paddle.
     ctx.fillStyle = "#c7ff4d";
+
     ctx.fillRect(
         ai.x - CONFIG.paddleWidth / 2,
         ai.y - CONFIG.paddleHeight / 2,
@@ -831,8 +839,9 @@ function drawArena() {
         CONFIG.paddleHeight
     );
 
-    // Player paddle
+    // Player paddle.
     ctx.fillStyle = "#ffffff";
+
     ctx.fillRect(
         player.x - CONFIG.paddleWidth / 2,
         player.y - CONFIG.paddleHeight / 2,
@@ -840,8 +849,9 @@ function drawArena() {
         CONFIG.paddleHeight
     );
 
-    // Ball
+    // Ball.
     ctx.beginPath();
+
     ctx.arc(
         liveBall.x,
         liveBall.y,
@@ -856,35 +866,30 @@ function drawArena() {
     ctx.fill();
     ctx.shadowBlur = 0;
 
-    // Scores
-    ctx.fillStyle = "#c7ff4d";
-    ctx.font = "bold 32px monospace";
+    // Scores.
     ctx.textAlign = "center";
+    ctx.font = "bold 32px monospace";
 
-    ctx.fillText(
-        match.ai,
-        CONFIG.width / 2,
-        100
-    );
+    ctx.fillStyle = "#c7ff4d";
+    ctx.fillText(match.ai, CONFIG.width / 2, 100);
 
     ctx.fillStyle = "#ffffff";
-
     ctx.fillText(
         match.player,
         CONFIG.width / 2,
         CONFIG.height - 85
     );
 
-    // Labels
     ctx.font = "13px monospace";
-    ctx.fillStyle = "#888";
+    ctx.fillStyle = "#888888";
 
     ctx.fillText("AI", 55, 40);
     ctx.fillText("PLAYER", 65, CONFIG.height - 25);
 }
 
+
 // ============================================================
-// 10. GAME LOOP
+// 12. GAME LOOP
 // ============================================================
 
 function gameLoop(now) {
@@ -904,11 +909,52 @@ function gameLoop(now) {
     raf = requestAnimationFrame(gameLoop);
 }
 
+
 // ============================================================
-// 11. GAME CONTROL
+// 13. SCREEN MANAGEMENT
+// ============================================================
+
+function showScreen(name) {
+    const screens = [
+        "menuScreen",
+        "gameScreen",
+        "statsScreen"
+    ];
+
+    screens.forEach(id => {
+        $(id)?.classList.add("hidden");
+    });
+
+    const target = {
+        menu: "menuScreen",
+        game: "gameScreen",
+        stats: "statsScreen"
+    }[name];
+
+    if (target) {
+        $(target)?.classList.remove("hidden");
+    }
+}
+
+function showPauseOverlay() {
+    $("pauseOverlay")?.classList.remove("hidden");
+}
+
+function hidePauseOverlay() {
+    $("pauseOverlay")?.classList.add("hidden");
+}
+
+
+// ============================================================
+// 14. GAME CONTROL
 // ============================================================
 
 function startMatch() {
+    if (!agent || !agent.ready) {
+        updateModelStatus("AI IS STILL LOADING");
+        return;
+    }
+
     screen = "game";
     paused = false;
     running = true;
@@ -930,9 +976,10 @@ function startMatch() {
 
     playStartSound();
 
-    if (raf) cancelAnimationFrame(raf);
+    if (raf) {
+        cancelAnimationFrame(raf);
+    }
 
-    lastFrameTime = performance.now();
     raf = requestAnimationFrame(gameLoop);
 
     updateGameUI();
@@ -972,9 +1019,21 @@ function endMatch() {
     statistics.aiPoints += match.ai;
     statistics.totalDuration += match.duration;
 
+    const totalPoints = match.player + match.ai;
+
+    const aiRate = totalPoints > 0
+        ? match.ai / totalPoints * 100
+        : 0;
+
+    const playerRate = totalPoints > 0
+        ? match.player / totalPoints * 100
+        : 0;
+
     statistics.history.push({
         player: match.player,
         ai: match.ai,
+        playerRate,
+        aiRate,
         duration: match.duration,
         updates: agent ? agent.updates : 0
     });
@@ -995,108 +1054,18 @@ function endMatch() {
     showScreen("menu");
 }
 
-function showScreen(name) {
-    const screens = {
-        menu: "menuScreen",
-        game: "gameScreen",
-        stats: "statsScreen"
-    };
-
-    Object.values(screens).forEach(id => {
-        const element = $(id);
-        if (element) element.classList.add("hidden");
-    });
-
-    const target = $(screens[name]);
-
-    if (target) {
-        target.classList.remove("hidden");
-    }
-}
-
-function showPauseOverlay() {
-    const overlay = $("pauseOverlay");
-    if (overlay) overlay.classList.remove("hidden");
-}
-
-function hidePauseOverlay() {
-    const overlay = $("pauseOverlay");
-    if (overlay) overlay.classList.add("hidden");
-}
 
 // ============================================================
-// 12. STATISTICS
+// 15. STATISTICS
 // ============================================================
 
-function getDefenseRate() {
-    const total = statistics.playerPoints + statistics.aiPoints;
+function getAIRate() {
+    const total =
+        statistics.playerPoints + statistics.aiPoints;
 
     if (total === 0) return 0;
 
-    return (
-        statistics.playerPoints / total
-    ) * 100;
-}
-
-function updateGameUI() {
-    const defenseRate = getDefenseRate();
-
-    const liveRate = $("liveRate");
-    const liveUpdates = $("liveUpdates");
-    const liveSpeed = $("liveSpeed");
-
-    if (liveRate) {
-        liveRate.textContent =
-            `${defenseRate.toFixed(1)}%`;
-    }
-
-    if (liveUpdates) {
-        liveUpdates.textContent =
-            agent ? agent.updates : 0;
-    }
-
-    if (liveSpeed) {
-        liveSpeed.textContent =
-            $("speedSelect")?.value || "NORMAL";
-    }
-
-    const statMatches = $("statMatches");
-    const statRate = $("statRate");
-    const statTime = $("statTime");
-    const statUpdates = $("statUpdates");
-    const statExperiences = $("statExperiences");
-    const statEpsilon = $("statEpsilon");
-
-    if (statMatches) {
-        statMatches.textContent = statistics.matches;
-    }
-
-    if (statRate) {
-        statRate.textContent =
-            `${defenseRate.toFixed(1)}%`;
-    }
-
-    if (statTime) {
-        statTime.textContent =
-            formatTime(statistics.totalDuration);
-    }
-
-    if (statUpdates) {
-        statUpdates.textContent =
-            agent ? agent.updates : 0;
-    }
-
-    if (statExperiences) {
-        statExperiences.textContent =
-            agent ? agent.experiences : 0;
-    }
-
-    if (statEpsilon) {
-        statEpsilon.textContent =
-            agent ? agent.epsilon.toFixed(3) : "1.000";
-    }
-
-    drawStatsChart();
+    return statistics.aiPoints / total * 100;
 }
 
 function formatTime(seconds) {
@@ -1119,9 +1088,7 @@ function saveStats() {
 
 function loadStats() {
     try {
-        const saved = localStorage.getItem(
-            "pong-statistics"
-        );
+        const saved = localStorage.getItem("pong-statistics");
 
         if (saved) {
             const parsed = JSON.parse(saved);
@@ -1130,10 +1097,81 @@ function loadStats() {
                 ...statistics,
                 ...parsed
             };
+
+            if (!Array.isArray(statistics.history)) {
+                statistics.history = [];
+            }
         }
     } catch (error) {
         console.error("Statistics load failed:", error);
     }
+}
+
+function updateGameUI() {
+    const rate = getAIRate();
+
+    if ($("liveRate")) {
+        $("liveRate").textContent =
+            `${rate.toFixed(1)}%`;
+    }
+
+    if ($("liveUpdates")) {
+        $("liveUpdates").textContent =
+            agent ? agent.updates : 0;
+    }
+
+    if ($("liveSpeed")) {
+        $("liveSpeed").textContent = "NORMAL";
+    }
+
+    if ($("statMatches")) {
+        $("statMatches").textContent = statistics.matches;
+    }
+
+    if ($("statRate")) {
+        $("statRate").textContent =
+            `${rate.toFixed(1)}%`;
+    }
+
+    if ($("statTime")) {
+        $("statTime").textContent =
+            formatTime(statistics.totalDuration);
+    }
+
+    if ($("statUpdates")) {
+        $("statUpdates").textContent =
+            agent ? agent.updates : 0;
+    }
+
+    if ($("statExperiences")) {
+        $("statExperiences").textContent =
+            agent ? agent.experiences : 0;
+    }
+
+    if ($("statEpsilon")) {
+        $("statEpsilon").textContent =
+            agent ? agent.epsilon.toFixed(3) : "0.250";
+    }
+
+    drawStatsChart();
+}
+
+
+// ============================================================
+// 16. STATISTICS GRAPH
+// ============================================================
+
+function getChartRate(item, key, scoreKey) {
+    if (Number.isFinite(item[key])) {
+        return item[key];
+    }
+
+    const total =
+        (item.player || 0) + (item.ai || 0);
+
+    return total > 0
+        ? (item[scoreKey] || 0) / total * 100
+        : 0;
 }
 
 function drawStatsChart() {
@@ -1152,8 +1190,10 @@ function drawStatsChart() {
 
     const history = statistics.history || [];
 
+    canvas.chartSeries = [];
+
     if (history.length === 0) {
-        ctx.fillStyle = "#777";
+        ctx.fillStyle = "#888888";
         ctx.font = "14px monospace";
         ctx.textAlign = "center";
 
@@ -1166,47 +1206,316 @@ function drawStatsChart() {
         return;
     }
 
-    const maxScore = Math.max(
-        1,
-        ...history.map(item =>
-            Math.max(item.player, item.ai)
+    const padding = {
+        left: 55,
+        right: 25,
+        top: 25,
+        bottom: 40
+    };
+
+    const graphWidth =
+        width - padding.left - padding.right;
+
+    const graphHeight =
+        height - padding.top - padding.bottom;
+
+    // Percentage grid.
+    ctx.font = "11px monospace";
+    ctx.textAlign = "right";
+    ctx.fillStyle = "#888888";
+
+    for (
+        let percentage = 0;
+        percentage <= 100;
+        percentage += 20
+    ) {
+        const y = padding.top +
+            graphHeight * (1 - percentage / 100);
+
+        ctx.strokeStyle = "#252525";
+        ctx.lineWidth = 1;
+
+        ctx.beginPath();
+        ctx.moveTo(padding.left, y);
+        ctx.lineTo(width - padding.right, y);
+        ctx.stroke();
+
+        ctx.fillText(
+            `${percentage}%`,
+            padding.left - 10,
+            y + 4
+        );
+    }
+
+    const series = [
+        {
+            key: "playerRate",
+            scoreKey: "player",
+            name: "PLAYER",
+            color: "#ffffff"
+        },
+        {
+            key: "aiRate",
+            scoreKey: "ai",
+            name: "AI",
+            color: "#c7ff4d"
+        }
+    ];
+
+    series.forEach(item => {
+        item.points = history.map((matchItem, index) => {
+            const rate = getChartRate(
+                matchItem,
+                item.key,
+                item.scoreKey
+            );
+
+            const x = history.length === 1
+                ? padding.left + graphWidth / 2
+                : padding.left +
+                    index / (history.length - 1) *
+                    graphWidth;
+
+            const y = padding.top +
+                graphHeight * (1 - rate / 100);
+
+            return { x, y, rate };
+        });
+
+        ctx.strokeStyle = item.color;
+        ctx.lineWidth = 2.5;
+        ctx.lineJoin = "round";
+        ctx.lineCap = "round";
+
+        ctx.beginPath();
+
+        item.points.forEach((point, index) => {
+            if (index === 0) {
+                ctx.moveTo(point.x, point.y);
+            } else {
+                ctx.lineTo(point.x, point.y);
+            }
+        });
+
+        ctx.stroke();
+
+        item.points.forEach(point => {
+            ctx.fillStyle = item.color;
+
+            ctx.beginPath();
+            ctx.arc(point.x, point.y, 4, 0, Math.PI * 2);
+            ctx.fill();
+        });
+    });
+
+    canvas.chartSeries = series;
+
+    ctx.fillStyle = "#888888";
+    ctx.font = "10px monospace";
+    ctx.textAlign = "center";
+
+    ctx.fillText(
+        "MATCH PROGRESSION",
+        width / 2,
+        height - 8
+    );
+}
+
+
+// ============================================================
+// 17. CHART HOVER
+// ============================================================
+
+function distanceToSegment(px, py, a, b) {
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+
+    const lengthSquared = dx * dx + dy * dy;
+
+    if (lengthSquared === 0) {
+        return Math.hypot(px - a.x, py - a.y);
+    }
+
+    const t = Math.max(
+        0,
+        Math.min(
+            1,
+            ((px - a.x) * dx + (py - a.y) * dy) /
+                lengthSquared
         )
     );
 
-    const step = width / Math.max(history.length, 1);
+    const nearestX = a.x + t * dx;
+    const nearestY = a.y + t * dy;
 
-    ctx.strokeStyle = "#c7ff4d";
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-
-    history.forEach((item, index) => {
-        const x = index * step + step / 2;
-        const y = height - 20 -
-            (item.player / maxScore) * (height - 40);
-
-        if (index === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
-    });
-
-    ctx.stroke();
-
-    ctx.strokeStyle = "#777";
-    ctx.beginPath();
-
-    history.forEach((item, index) => {
-        const x = index * step + step / 2;
-        const y = height - 20 -
-            (item.ai / maxScore) * (height - 40);
-
-        if (index === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
-    });
-
-    ctx.stroke();
+    return Math.hypot(
+        px - nearestX,
+        py - nearestY
+    );
 }
 
+function setupChartHover() {
+    const canvas = $("statsChart");
+    const tooltip = $("chartTooltip");
+
+    if (!canvas || !tooltip) return;
+
+    canvas.addEventListener("mousemove", event => {
+        const rect = canvas.getBoundingClientRect();
+
+        const mouseX =
+            (event.clientX - rect.left) *
+            canvas.width / rect.width;
+
+        const mouseY =
+            (event.clientY - rect.top) *
+            canvas.height / rect.height;
+
+        const seriesList = canvas.chartSeries || [];
+
+        let nearest = null;
+        let minimumDistance = 12;
+
+        seriesList.forEach(series => {
+            const points = series.points;
+
+            if (!points || points.length === 0) return;
+
+            if (points.length === 1) {
+                const p = points[0];
+
+                const distance = Math.hypot(
+                    mouseX - p.x,
+                    mouseY - p.y
+                );
+
+                if (distance < minimumDistance) {
+                    minimumDistance = distance;
+
+                    nearest = {
+                        series,
+                        index: 0
+                    };
+                }
+
+                return;
+            }
+
+            for (let i = 0; i < points.length - 1; i++) {
+                const distance = distanceToSegment(
+                    mouseX,
+                    mouseY,
+                    points[i],
+                    points[i + 1]
+                );
+
+                if (distance < minimumDistance) {
+                    minimumDistance = distance;
+
+                    const d1 = Math.hypot(
+                        mouseX - points[i].x,
+                        mouseY - points[i].y
+                    );
+
+                    const d2 = Math.hypot(
+                        mouseX - points[i + 1].x,
+                        mouseY - points[i + 1].y
+                    );
+
+                    nearest = {
+                        series,
+                        index: d1 <= d2 ? i : i + 1
+                    };
+                }
+            }
+        });
+
+        if (!nearest) {
+            tooltip.classList.add("hidden");
+            canvas.style.cursor = "default";
+            return;
+        }
+
+        const { series, index } = nearest;
+        const item = statistics.history[index];
+
+        const rate = getChartRate(
+            item,
+            series.key,
+            series.scoreKey
+        );
+
+        const score = series.scoreKey === "ai"
+            ? item.ai
+            : item.player;
+
+        tooltip.innerHTML = `
+            <div class="tooltip-title">
+                ${series.name}
+            </div>
+
+            <div>Match: ${index + 1}</div>
+
+            <div class="${series.name === "AI"
+                ? "tooltip-ai"
+                : "tooltip-player"}">
+                Score: ${score}
+            </div>
+
+            <div style="color:${series.color}">
+                Rate: ${rate.toFixed(1)}%
+            </div>
+
+            <div style="color:#888888">
+                Total points: ${(item.ai || 0) + (item.player || 0)}
+            </div>
+        `;
+
+        tooltip.classList.remove("hidden");
+
+        const container =
+            canvas.closest(".chart-container");
+
+        const containerRect =
+            container.getBoundingClientRect();
+
+        const tooltipWidth = tooltip.offsetWidth;
+        const tooltipHeight = tooltip.offsetHeight;
+
+        let left =
+            event.clientX - containerRect.left + 15;
+
+        let top =
+            event.clientY - containerRect.top + 15;
+
+        left = Math.min(
+            left,
+            container.clientWidth - tooltipWidth - 8
+        );
+
+        top = Math.min(
+            top,
+            container.clientHeight - tooltipHeight - 8
+        );
+
+        tooltip.style.left =
+            `${Math.max(8, left)}px`;
+
+        tooltip.style.top =
+            `${Math.max(8, top)}px`;
+
+        canvas.style.cursor = "crosshair";
+    });
+
+    canvas.addEventListener("mouseleave", () => {
+        tooltip.classList.add("hidden");
+        canvas.style.cursor = "default";
+    });
+}
+
+
 // ============================================================
-// 13. MODEL STATUS
+// 18. MODEL STATUS
 // ============================================================
 
 function updateModelStatus(message) {
@@ -1217,22 +1526,25 @@ function updateModelStatus(message) {
     }
 }
 
+
 // ============================================================
-// 14. INPUT
+// 19. INPUT
 // ============================================================
 
 function setupInput() {
     document.addEventListener("keydown", event => {
+        const key = event.key.toLowerCase();
+
         if (
             event.key === "ArrowLeft" ||
-            event.key.toLowerCase() === "a"
+            key === "a"
         ) {
             keys.left = true;
         }
 
         if (
             event.key === "ArrowRight" ||
-            event.key.toLowerCase() === "d"
+            key === "d"
         ) {
             keys.right = true;
         }
@@ -1247,29 +1559,32 @@ function setupInput() {
     });
 
     document.addEventListener("keyup", event => {
+        const key = event.key.toLowerCase();
+
         if (
             event.key === "ArrowLeft" ||
-            event.key.toLowerCase() === "a"
+            key === "a"
         ) {
             keys.left = false;
         }
 
         if (
             event.key === "ArrowRight" ||
-            event.key.toLowerCase() === "d"
+            key === "d"
         ) {
             keys.right = false;
         }
     });
 
-    document.addEventListener("blur", () => {
+    window.addEventListener("blur", () => {
         keys.left = false;
         keys.right = false;
     });
 }
 
+
 // ============================================================
-// 15. BUTTONS
+// 20. BUTTONS
 // ============================================================
 
 function setupButtons() {
@@ -1280,7 +1595,9 @@ function setupButtons() {
 
     $("statsBtn")?.addEventListener("click", () => {
         initAudio();
+
         screen = "stats";
+
         showScreen("stats");
         updateGameUI();
     });
@@ -1306,14 +1623,18 @@ function setupButtons() {
         pauseGame();
     });
 
+    $("resumeBtn")?.addEventListener("click", () => {
+        if (paused) {
+            pauseGame();
+        }
+    });
+
     $("resetStatsBtn")?.addEventListener("click", () => {
         statistics = {
             matches: 0,
             playerPoints: 0,
             aiPoints: 0,
             totalDuration: 0,
-            updates: 0,
-            experiences: 0,
             history: []
         };
 
@@ -1331,15 +1652,15 @@ function setupButtons() {
     }, true);
 }
 
+
 // ============================================================
-// 16. INITIALIZATION
+// 21. INITIALIZATION
 // ============================================================
 
 async function init() {
     try {
         updateModelStatus("INITIALIZING AI...");
 
-        // CPU backend avoids WebGL compatibility problems.
         await tf.setBackend("cpu");
         await tf.ready();
 
@@ -1354,12 +1675,9 @@ async function init() {
 
         await agent.initialize();
 
-        envs = new TrainingEnvironments(
-            CONFIG.parallelEnvironments
-        );
-
         setupInput();
         setupButtons();
+        setupChartHover();
 
         showScreen("menu");
 
