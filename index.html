@@ -3,218 +3,754 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="theme-color" content="#050505">
-    <meta name="description" content="PONG AI - Deep Reinforcement Learning Arcade Game">
 
-    <title>PONG AI | Classic Arcade</title>
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
 
-    <link rel="stylesheet" href="./style.css?v=4">
+    <meta
+        name="description"
+        content="Progressive AI Pong - A learning-based arcade game."
+    >
 
-    <script
-        src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js"
-        defer>
-    </script>
+    <meta name="theme-color" content="#080808">
 
-    <script src="./game.js?v=4" defer></script>
+    <title>PONG AI | Neural Arcade</title>
+
+    <!-- Prevent favicon 404 -->
+    <link rel="icon" href="data:,">
+
+    <!-- Existing stylesheet -->
+    <link rel="stylesheet" href="./style.css?v=9">
+
+    <!-- Fallback layout and styling -->
+    <style>
+        :root {
+            color-scheme: dark;
+            --background: #080808;
+            --panel: #111111;
+            --border: #292929;
+            --lime: #b6ff00;
+            --white: #ffffff;
+            --muted: #888888;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            background: var(--background);
+            color: var(--white);
+            font-family: Arial, Helvetica, sans-serif;
+        }
+
+        button {
+            cursor: pointer;
+            font: inherit;
+        }
+
+        button:focus-visible {
+            outline: 2px solid var(--lime);
+            outline-offset: 4px;
+        }
+
+        .screen {
+            min-height: 100vh;
+            width: 100%;
+            padding: 32px 20px;
+        }
+
+        #menuScreen {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #gameScreen,
+        #statsScreen {
+            display: none;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .main-card {
+            width: min(100%, 620px);
+            padding: 48px 30px;
+            text-align: center;
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+        }
+
+        .eyebrow {
+            color: var(--lime);
+            font-family: monospace;
+            letter-spacing: 4px;
+            font-size: 12px;
+        }
+
+        .main-title {
+            font-family: monospace;
+            font-size: clamp(42px, 8vw, 76px);
+            font-weight: 900;
+            letter-spacing: -4px;
+            margin: 20px 0 8px;
+        }
+
+        .main-title span {
+            color: var(--lime);
+        }
+
+        .subtitle {
+            color: var(--muted);
+            font-size: 14px;
+            line-height: 1.7;
+            margin-bottom: 35px;
+        }
+
+        .button-stack {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            max-width: 280px;
+            margin: auto;
+        }
+
+        .primary-button,
+        .secondary-button,
+        .danger-button {
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 13px 20px;
+            font-weight: 700;
+            transition: 0.2s ease;
+        }
+
+        .primary-button {
+            color: #080808;
+            background: var(--lime);
+            border-color: var(--lime);
+        }
+
+        .primary-button:hover {
+            filter: brightness(1.12);
+        }
+
+        .secondary-button {
+            color: var(--white);
+            background: #171717;
+        }
+
+        .secondary-button:hover {
+            border-color: var(--lime);
+        }
+
+        .danger-button {
+            color: #ff7777;
+            background: #1a1010;
+        }
+
+        .game-header {
+            width: min(100%, 1000px);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 15px;
+            flex-wrap: wrap;
+            margin-bottom: 20px;
+        }
+
+        .game-header h1 {
+            font-family: monospace;
+            font-size: 24px;
+            margin: 0;
+        }
+
+        .game-header h1 span {
+            color: var(--lime);
+        }
+
+        .game-controls {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .game-controls button {
+            padding: 9px 13px;
+        }
+
+        .game-layout {
+            width: min(100%, 1000px);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 18px;
+        }
+
+        .arena-wrapper {
+            width: 100%;
+            max-width: 900px;
+            background: #050505;
+            border: 1px solid #333;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        #arena {
+            display: block;
+            width: 100%;
+            height: auto;
+            aspect-ratio: 900 / 620;
+        }
+
+        .live-metrics {
+            width: 100%;
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 12px;
+        }
+
+        .metric-card {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 15px;
+            text-align: center;
+        }
+
+        .metric-label {
+            color: var(--muted);
+            font-size: 11px;
+            letter-spacing: 1.5px;
+            margin-bottom: 9px;
+        }
+
+        .metric-value {
+            color: var(--lime);
+            font-family: monospace;
+            font-size: clamp(17px, 3vw, 24px);
+            font-weight: 700;
+        }
+
+        .model-status {
+            color: var(--muted);
+            font-family: monospace;
+            font-size: 12px;
+            text-align: center;
+            margin-top: 5px;
+        }
+
+        .controls-help {
+            color: var(--muted);
+            font-size: 12px;
+            text-align: center;
+        }
+
+        .stats-content {
+            width: min(100%, 900px);
+        }
+
+        .stats-heading {
+            font-family: monospace;
+            font-size: 30px;
+            margin: 12px 0 25px;
+        }
+
+        .stats-heading span {
+            color: var(--lime);
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 12px;
+            margin-bottom: 25px;
+        }
+
+        .stats-card {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 18px;
+        }
+
+        .stats-card .metric-value {
+            margin-top: 10px;
+        }
+
+        .chart-container {
+            position: relative;
+            width: 100%;
+            padding: 15px;
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+        }
+
+        .chart-title {
+            font-family: monospace;
+            font-size: 14px;
+            color: var(--lime);
+            margin-bottom: 15px;
+        }
+
+        #statsChart {
+            width: 100%;
+            height: auto;
+            display: block;
+            aspect-ratio: 2 / 1;
+        }
+
+        #chartTooltip {
+            display: none;
+            position: absolute;
+            z-index: 5;
+            pointer-events: none;
+            padding: 8px 10px;
+            background: #222;
+            border: 1px solid var(--lime);
+            border-radius: 4px;
+            color: white;
+            font-size: 11px;
+            white-space: nowrap;
+        }
+
+        .stats-actions {
+            display: flex;
+            justify-content: center;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-top: 22px;
+        }
+
+        #pauseOverlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 20;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0, 0, 0, 0.88);
+        }
+
+        .pause-card {
+            width: min(90%, 340px);
+            padding: 35px;
+            text-align: center;
+            background: #151515;
+            border: 1px solid var(--lime);
+            border-radius: 10px;
+        }
+
+        .pause-card h2 {
+            font-family: monospace;
+            color: var(--lime);
+            font-size: 30px;
+            margin-top: 0;
+        }
+
+        .pause-card button {
+            width: 100%;
+            margin-top: 10px;
+        }
+
+        @media (max-width: 600px) {
+            .screen {
+                padding: 18px 12px;
+            }
+
+            .main-card {
+                padding: 35px 18px;
+            }
+
+            .game-header {
+                align-items: flex-start;
+            }
+
+            .live-metrics,
+            .stats-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+
+            .stats-heading {
+                font-size: 24px;
+            }
+        }
+    </style>
 </head>
 
 <body>
 
-    <!-- MAIN MENU -->
-    <section id="menuScreen" class="screen">
-        <div class="menu-container">
+    <!-- =================================================
+         MAIN MENU
+    ================================================== -->
 
-            <div class="logo">
-                <span class="logo-small">NEURAL ARCADE</span>
-                <h1>PONG<span>AI</span></h1>
-                <p>DEEP REINFORCEMENT LEARNING</p>
+    <section id="menuScreen" class="screen">
+
+        <div class="main-card">
+
+            <div class="eyebrow">
+                NEURAL ARCADE SYSTEM
             </div>
 
-            <div class="menu-buttons">
-                <button id="playBtn" class="main-btn" type="button">
-                    PLAY
+            <h1 class="main-title">
+                PONG <span>AI</span>
+            </h1>
+
+            <p class="subtitle">
+                Challenge an AI opponent that improves
+                as the game progresses.
+            </p>
+
+            <div class="button-stack">
+
+                <button
+                    id="playBtn"
+                    class="primary-button"
+                    type="button"
+                >
+                    START GAME
                 </button>
 
-                <button id="statsBtn" class="secondary-btn" type="button">
+                <button
+                    id="statsBtn"
+                    class="secondary-button"
+                    type="button"
+                >
                     STATISTICS
                 </button>
+
             </div>
 
-            <div class="model-information">
-                <span class="status-indicator"></span>
-                <span id="modelStatus">INITIALIZING AI...</span>
-            </div>
-
-            <div class="controls-information">
-                <p>CONTROLS</p>
-                <span>← → ARROW KEYS</span>
-                <span>OR A / D</span>
-                <span>SPACE TO PAUSE</span>
-            </div>
+            <p
+                id="modelStatus"
+                class="model-status"
+                aria-live="polite"
+            >
+                INITIALIZING AI...
+            </p>
 
         </div>
+
     </section>
 
 
-    <!-- GAME SCREEN -->
-    <section id="gameScreen" class="screen hidden">
+    <!-- =================================================
+         GAME SCREEN
+    ================================================== -->
+
+    <section id="gameScreen" class="screen">
 
         <header class="game-header">
-            <div class="game-title">
-                <span class="header-label">NEURAL ARCADE</span>
-                <h2>PONG AI</h2>
+
+            <h1>
+                PONG <span>AI</span>
+            </h1>
+
+            <div class="game-controls">
+
+                <button
+                    id="pauseBtn"
+                    class="secondary-button"
+                    type="button"
+                >
+                    PAUSE
+                </button>
+
+                <button
+                    id="endMatchBtn"
+                    class="danger-button"
+                    type="button"
+                >
+                    END MATCH
+                </button>
+
+                <button
+                    id="gameMenuBtn"
+                    class="secondary-button"
+                    type="button"
+                >
+                    MENU
+                </button>
+
             </div>
 
-            <div class="live-statistics">
-                <div class="live-stat">
-                    <span>AI SCORE RATE</span>
-                    <strong id="liveRate">0%</strong>
-                </div>
-
-                <div class="live-stat">
-                    <span>DQN UPDATES</span>
-                    <strong id="liveUpdates">0</strong>
-                </div>
-
-                <div class="live-stat">
-                    <span>SPEED</span>
-                    <strong id="liveSpeed">NORMAL</strong>
-                </div>
-            </div>
         </header>
 
-        <main class="arena-container">
-            <canvas
-                id="arena"
-                width="900"
-                height="620"
-                aria-label="Pong AI game arena">
-            </canvas>
-        </main>
+        <main class="game-layout">
 
-        <div class="game-controls">
-            <button id="pauseBtn" class="secondary-btn" type="button">
-                PAUSE
-            </button>
+            <div class="arena-wrapper">
 
-            <button id="newMatchBtn" class="secondary-btn" type="button">
-                NEW MATCH
-            </button>
+                <canvas
+                    id="arena"
+                    width="900"
+                    height="620"
+                    aria-label="Pong game arena"
+                ></canvas>
 
-            <button id="endMatchBtn" class="danger-btn" type="button">
-                END MATCH
-            </button>
-        </div>
-
-        <div id="pauseOverlay" class="overlay hidden">
-            <div class="overlay-content">
-                <h2>PAUSED</h2>
-                <p>GAME TEMPORARILY STOPPED</p>
-
-                <button id="resumeBtn" class="main-btn" type="button">
-                    RESUME
-                </button>
-
-                <button id="gameMenuBtn" class="secondary-btn" type="button">
-                    MAIN MENU
-                </button>
             </div>
-        </div>
+
+            <div class="live-metrics">
+
+                <div class="metric-card">
+                    <div class="metric-label">
+                        PLAYER WIN RATE
+                    </div>
+
+                    <div
+                        id="liveRate"
+                        class="metric-value"
+                    >
+                        0%
+                    </div>
+                </div>
+
+                <div class="metric-card">
+                    <div class="metric-label">
+                        AI UPDATES
+                    </div>
+
+                    <div
+                        id="liveUpdates"
+                        class="metric-value"
+                    >
+                        0
+                    </div>
+                </div>
+
+                <div class="metric-card">
+                    <div class="metric-label">
+                        AI LEVEL / ACCURACY
+                    </div>
+
+                    <div
+                        id="liveSpeed"
+                        class="metric-value"
+                    >
+                        LV.1 | 50%
+                    </div>
+                </div>
+
+            </div>
+
+            <p class="controls-help">
+                MOVE: ARROW KEYS or A / D
+                &nbsp; | &nbsp;
+                PAUSE: ESC
+            </p>
+
+        </main>
 
     </section>
 
 
-    <!-- STATISTICS SCREEN -->
-    <section id="statsScreen" class="screen hidden">
-        <div class="stats-container">
+    <!-- =================================================
+         PAUSE OVERLAY
+    ================================================== -->
 
-            <header class="stats-header">
-                <div>
-                    <span class="header-label">NEURAL ARCADE</span>
-                    <h1>STATISTICS</h1>
-                </div>
+    <div
+        id="pauseOverlay"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Game paused"
+    >
 
-                <button id="statsBackBtn" class="secondary-btn" type="button">
-                    BACK
-                </button>
-            </header>
+        <div class="pause-card">
+
+            <h2>PAUSED</h2>
+
+            <p class="subtitle">
+                Game is currently paused.
+            </p>
+
+            <button
+                id="resumeBtn"
+                class="primary-button"
+                type="button"
+            >
+                RESUME
+            </button>
+
+            <button
+                id="newMatchBtn"
+                class="secondary-button"
+                type="button"
+            >
+                RESTART MATCH
+            </button>
+
+            <button
+                id="gameMenuBtn"
+                class="secondary-button"
+                type="button"
+            >
+                BACK TO MENU
+            </button>
+
+        </div>
+
+    </div>
 
 
-            <!-- STATISTICS CARDS -->
+    <!-- =================================================
+         STATISTICS SCREEN
+    ================================================== -->
+
+    <section id="statsScreen" class="screen">
+
+        <main class="stats-content">
+
+            <h1 class="stats-heading">
+                GAME <span>STATISTICS</span>
+            </h1>
+
             <div class="stats-grid">
 
-                <div class="stat-card">
-                    <span>TOTAL MATCHES</span>
-                    <strong id="statMatches">0</strong>
+                <div class="stats-card">
+                    <div class="metric-label">
+                        TOTAL MATCHES
+                    </div>
+
+                    <div
+                        id="statMatches"
+                        class="metric-value"
+                    >
+                        0
+                    </div>
                 </div>
 
-                <div class="stat-card">
-                    <span>AI SCORE RATE</span>
-                    <strong id="statRate">0%</strong>
+                <div class="stats-card">
+                    <div class="metric-label">
+                        PLAYER WIN RATE
+                    </div>
+
+                    <div
+                        id="statRate"
+                        class="metric-value"
+                    >
+                        0%
+                    </div>
                 </div>
 
-                <div class="stat-card">
-                    <span>TOTAL PLAY TIME</span>
-                    <strong id="statTime">0m 0s</strong>
+                <div class="stats-card">
+                    <div class="metric-label">
+                        TOTAL PLAY TIME
+                    </div>
+
+                    <div
+                        id="statTime"
+                        class="metric-value"
+                    >
+                        0m 0s
+                    </div>
                 </div>
 
-                <div class="stat-card">
-                    <span>DQN UPDATES</span>
-                    <strong id="statUpdates">0</strong>
+                <div class="stats-card">
+                    <div class="metric-label">
+                        AI UPDATES
+                    </div>
+
+                    <div
+                        id="statUpdates"
+                        class="metric-value"
+                    >
+                        0
+                    </div>
                 </div>
 
-                <div class="stat-card">
-                    <span>EXPERIENCES</span>
-                    <strong id="statExperiences">0</strong>
+                <div class="stats-card">
+                    <div class="metric-label">
+                        EXPERIENCES
+                    </div>
+
+                    <div
+                        id="statExperiences"
+                        class="metric-value"
+                    >
+                        0
+                    </div>
                 </div>
 
-                <div class="stat-card">
-                    <span>EPSILON</span>
-                    <strong id="statEpsilon">0.250</strong>
+                <div class="stats-card">
+                    <div class="metric-label">
+                        EXPLORATION RATE
+                    </div>
+
+                    <div
+                        id="statEpsilon"
+                        class="metric-value"
+                    >
+                        N/A
+                    </div>
                 </div>
 
             </div>
 
-
-            <!-- PERFORMANCE GRAPH -->
             <div class="chart-container">
 
-                <div class="chart-header">
-                    <h2>MATCH PERFORMANCE</h2>
-
-                    <div class="chart-legend">
-                        <span class="player-legend">PLAYER</span>
-                        <span class="ai-legend">AI</span>
-                    </div>
+                <div class="chart-title">
+                    MATCH PERFORMANCE
                 </div>
 
                 <canvas
                     id="statsChart"
                     width="800"
-                    height="300"
-                    aria-label="Match performance chart">
-                </canvas>
+                    height="400"
+                    aria-label="Match performance chart"
+                ></canvas>
 
-                <!-- HOVER TOOLTIP -->
                 <div
                     id="chartTooltip"
-                    class="chart-tooltip hidden"
-                    role="status">
-                </div>
+                    role="status"
+                ></div>
 
             </div>
 
+            <div class="stats-actions">
 
-            <button
-                id="resetStatsBtn"
-                class="danger-btn"
-                type="button">
-                RESET STATISTICS
-            </button>
+                <button
+                    id="statsBackBtn"
+                    class="primary-button"
+                    type="button"
+                >
+                    BACK TO MENU
+                </button>
 
-        </div>
+                <button
+                    id="resetStatsBtn"
+                    class="danger-button"
+                    type="button"
+                >
+                    RESET STATISTICS
+                </button>
+
+            </div>
+
+        </main>
+
     </section>
+
+
+    <!-- =================================================
+         SCRIPTS
+         TensorFlow.js must load before game.js.
+    ================================================== -->
+
+    <script
+        src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js"
+        defer
+    ></script>
+
+    <script
+        src="./game.js?v=9"
+        defer
+    ></script>
 
 </body>
 </html>
+
