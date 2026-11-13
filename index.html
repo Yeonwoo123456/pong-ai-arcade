@@ -1,89 +1,105 @@
 
 <!DOCTYPE html>
-<html lang="ko">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PONG AI - Learning Arcade</title>
+
+    <title>PONG AI | Neural Arcade</title>
 
     <link rel="stylesheet" href="style.css">
 
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js"></script>
+    <!-- TensorFlow.js -->
+    <script
+        src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js"
+        defer>
+    </script>
+
+    <!-- Game JavaScript -->
+    <script src="game.js" defer></script>
 </head>
 
 <body>
 
-<main class="shell">
+    <!-- ================================================== -->
+    <!-- MAIN MENU -->
+    <!-- ================================================== -->
 
-    <header class="topline">
-        <div class="brand">
-            PONG AI
-            <span class="brand-sub">LEARNING ARCADE</span>
-        </div>
+    <section id="menuScreen" class="screen">
 
-        <div class="top-status">
-            <span id="modelStatus">AI MODEL: LOADING</span>
-        </div>
-    </header>
+        <div class="menu-container">
 
-    <!-- 메인 메뉴 -->
-    <section id="menuScreen" class="screen menu-screen">
-
-        <div class="menu-center">
-
-            <div class="eyebrow">
-                THE CLASSIC GAME / REBUILT WITH AI
+            <div class="logo">
+                <span class="logo-small">NEURAL ARCADE</span>
+                <h1>PONG<span>AI</span></h1>
+                <p>DEEP REINFORCEMENT LEARNING</p>
             </div>
 
-            <h1>PONG<span>_</span></h1>
-
-            <div class="menu-stage">
-                <div class="stage-paddle stage-top"></div>
-                <div class="stage-ball"></div>
-                <div class="stage-paddle stage-bottom"></div>
-                <div class="stage-midline"></div>
-            </div>
-
-            <p class="tagline">
-                AI ON TOP · YOU ON BOTTOM
-            </p>
-
-            <div class="menu-actions">
-                <button id="playBtn" class="arcade-button primary">
+            <div class="menu-buttons">
+                <button id="playBtn" class="main-btn">
                     PLAY
                 </button>
 
-                <button id="statsBtn" class="arcade-button">
+                <button id="statsBtn" class="secondary-btn">
                     STATISTICS
                 </button>
+            </div>
+
+            <div class="model-information">
+                <span class="status-indicator"></span>
+                <span id="modelStatus">INITIALIZING AI...</span>
+            </div>
+
+            <div class="controls-information">
+                <p>CONTROLS</p>
+                <span>← → ARROW KEYS</span>
+                <span>OR A / D</span>
+                <span>SPACE TO PAUSE</span>
             </div>
 
         </div>
 
     </section>
 
-    <!-- 게임 화면 -->
-    <section id="gameScreen" class="screen game-screen hidden">
 
-        <div class="game-toolbar">
+    <!-- ================================================== -->
+    <!-- GAME SCREEN -->
+    <!-- ================================================== -->
 
-            <button id="gameMenuBtn" class="small-button">
-                MENU
-            </button>
+    <section id="gameScreen" class="screen hidden">
 
-            <div class="live-metrics">
-                <span>DEFENSE <b id="liveRate">0%</b></span>
-                <span>UPDATES <b id="liveUpdates">0</b></span>
-                <span>TRAINING <b id="liveSpeed">10x</b></span>
+        <header class="game-header">
+
+            <div class="game-title">
+                <span class="header-label">NEURAL ARCADE</span>
+                <h2>PONG AI</h2>
             </div>
 
-            <button id="pauseBtn" class="small-button">
-                PAUSE
-            </button>
+            <div class="live-statistics">
 
-        </div>
+                <div class="live-stat">
+                    <span>DEFENSE RATE</span>
+                    <strong id="liveRate">0%</strong>
+                </div>
 
-        <div class="arena-wrap">
+                <div class="live-stat">
+                    <span>DQN UPDATES</span>
+                    <strong id="liveUpdates">0</strong>
+                </div>
+
+                <div class="live-stat">
+                    <span>SPEED</span>
+                    <strong id="liveSpeed">NORMAL</strong>
+                </div>
+
+            </div>
+
+        </header>
+
+
+        <!-- Game Canvas -->
+
+        <div class="arena-container">
 
             <canvas
                 id="arena"
@@ -91,116 +107,143 @@
                 height="620">
             </canvas>
 
-            <div id="pauseOverlay" class="pause-overlay hidden">
-                PAUSED
-            </div>
-
         </div>
+
+
+        <!-- Game Controls -->
 
         <div class="game-controls">
 
-            <span>TOP: DQN AI</span>
-            <span>BOTTOM: PLAYER</span>
+            <button id="pauseBtn" class="secondary-btn">
+                PAUSE
+            </button>
 
-            <label>
-                TRAINING SPEED
-
-                <select id="speedSelect">
-                    <option value="1">1x</option>
-                    <option value="5">5x</option>
-                    <option value="10" selected>10x</option>
-                    <option value="20">20x</option>
-                    <option value="50">50x</option>
-                </select>
-            </label>
-
-            <button id="newMatchBtn" class="small-button">
+            <button id="newMatchBtn" class="secondary-btn">
                 NEW MATCH
             </button>
 
-            <button id="endMatchBtn" class="small-button">
+            <button id="endMatchBtn" class="danger-btn">
                 END MATCH
             </button>
 
         </div>
 
-    </section>
 
-    <!-- 통계 화면 -->
-    <section id="statsScreen" class="screen stats-screen hidden">
+        <!-- Pause Overlay -->
 
-        <div class="section-head">
+        <div id="pauseOverlay" class="overlay hidden">
 
-            <button id="statsBackBtn" class="small-button">
-                BACK
-            </button>
+            <div class="overlay-content">
 
-            <h2>STATISTICS</h2>
+                <h2>PAUSED</h2>
 
-        </div>
+                <p>GAME TEMPORARILY STOPPED</p>
 
-        <div class="stat-grid">
+                <button
+                    class="main-btn"
+                    onclick="document.getElementById('pauseBtn').click()">
+                    RESUME
+                </button>
 
-            <article class="stat-card">
-                <span>COMPLETED MATCHES</span>
-                <strong id="statMatches">0</strong>
-            </article>
+                <button id="gameMenuBtn" class="secondary-btn">
+                    MAIN MENU
+                </button>
 
-            <article class="stat-card">
-                <span>AI DEFENSE RATE</span>
-                <strong id="statRate">0%</strong>
-            </article>
-
-            <article class="stat-card">
-                <span>TOTAL PLAY TIME</span>
-                <strong id="statTime">00:00</strong>
-            </article>
-
-            <article class="stat-card">
-                <span>DQN UPDATES</span>
-                <strong id="statUpdates">0</strong>
-            </article>
-
-            <article class="stat-card">
-                <span>TRAINING EXPERIENCES</span>
-                <strong id="statExperiences">0</strong>
-            </article>
-
-            <article class="stat-card">
-                <span>EXPLORATION</span>
-                <strong id="statEpsilon">1.000</strong>
-            </article>
-
-        </div>
-
-        <article class="chart-card">
-
-            <div class="chart-title">
-                DEFENSE RATE / MATCH
             </div>
 
-            <canvas
-                id="statsChart"
-                width="900"
-                height="270">
-            </canvas>
-
-        </article>
-
-        <button id="resetStatsBtn" class="small-button danger">
-            RESET LOCAL DATA
-        </button>
+        </div>
 
     </section>
 
-    <footer class="footer">
-        <span>INSERT COIN? NO. JUST PLAY.</span>
-        <span>PONG AI ARCADE</span>
-    </footer>
 
-</main>
+    <!-- ================================================== -->
+    <!-- STATISTICS SCREEN -->
+    <!-- ================================================== -->
 
-<script src="game.js"></script>
+    <section id="statsScreen" class="screen hidden">
+
+        <div class="stats-container">
+
+            <header class="stats-header">
+
+                <div>
+                    <span class="header-label">NEURAL ARCADE</span>
+                    <h1>STATISTICS</h1>
+                </div>
+
+                <button id="statsBackBtn" class="secondary-btn">
+                    BACK
+                </button>
+
+            </header>
+
+
+            <!-- Statistics Cards -->
+
+            <div class="stats-grid">
+
+                <div class="stat-card">
+                    <span>TOTAL MATCHES</span>
+                    <strong id="statMatches">0</strong>
+                </div>
+
+                <div class="stat-card">
+                    <span>DEFENSE RATE</span>
+                    <strong id="statRate">0%</strong>
+                </div>
+
+                <div class="stat-card">
+                    <span>TOTAL PLAY TIME</span>
+                    <strong id="statTime">0m 0s</strong>
+                </div>
+
+                <div class="stat-card">
+                    <span>DQN UPDATES</span>
+                    <strong id="statUpdates">0</strong>
+                </div>
+
+                <div class="stat-card">
+                    <span>EXPERIENCES</span>
+                    <strong id="statExperiences">0</strong>
+                </div>
+
+                <div class="stat-card">
+                    <span>EPSILON</span>
+                    <strong id="statEpsilon">1.000</strong>
+                </div>
+
+            </div>
+
+
+            <!-- Statistics Graph -->
+
+            <div class="chart-container">
+
+                <div class="chart-header">
+                    <h2>MATCH PERFORMANCE</h2>
+                    <div class="chart-legend">
+                        <span class="player-legend">PLAYER</span>
+                        <span class="ai-legend">AI</span>
+                    </div>
+                </div>
+
+                <canvas
+                    id="statsChart"
+                    width="800"
+                    height="300">
+                </canvas>
+
+            </div>
+
+
+            <button id="resetStatsBtn" class="danger-btn">
+                RESET STATISTICS
+            </button>
+
+        </div>
+
+    </section>
+
 
 </body>
 </html>
