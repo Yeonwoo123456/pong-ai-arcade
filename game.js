@@ -9,17 +9,29 @@ const CONFIG = {
     width: 900,
     height: 620,
 
-    paddleWidth: 150,
+    paddleWidth: 125,
     paddleHeight: 13,
     ballRadius: 9,
 
     playerSpeed: 8,
-    aiSpeed: 11,
     ballSpeed: 5,
 
+    // AI progression
+    aiBaseSpeed: 4.5,
+    aiMaxSpeed: 9.5,
+
+    aiBasePaddleWidth: 88,
+    aiMaxPaddleWidth: 135,
+
+    aiInitialError: 85,
+    aiMinimumError: 8,
+
+    aiMaxLevel: 16,
+    aiAttemptsPerLevel: 3,
+
+    // DQN
     replayCapacity: 12000,
     batchSize: 32,
-
     gamma: 0.97,
     learningRate: 0.0005,
 
@@ -34,7 +46,7 @@ const CONFIG = {
     maxAIAdjustment: 2
 };
 
-const MODEL_KEY = "pong-dqn-model-v4";
+const MODEL_KEY = "pong-dqn-model-v5";
 const $ = id => document.getElementById(id);
 
 
@@ -77,6 +89,12 @@ let statistics = {
     totalDuration: 0,
     history: []
 };
+
+// Persistent progression
+let aiAttempts = 0;
+let aiLevel = 1;
+let aiSkill = 0;
+let aiAimOffset = 0;
 
 let liveBall = {
     x: CONFIG.width / 2,
@@ -191,7 +209,74 @@ function playEndSound() {
 
 
 // ============================================================
-// 4. REPLAY MEMORY
+// 4. AI PROGRESSION
+// ============================================================
+
+function updateAISkill() {
+    aiLevel = Math.min(
+        CONFIG.aiMaxLevel,
+        Math.floor(
+            aiAttempts / CONFIG.aiAttemptsPerLevel
+        ) + 1
+    );
+
+    aiSkill = Math.min(1, aiAttempts / 45);
+}
+
+function getAISpeed() {
+    return CONFIG.aiBaseSpeed +
+        (CONFIG.aiMaxSpeed - CONFIG.aiBaseSpeed) *
+        aiSkill;
+}
+
+function getAIPaddleWidth() {
+    return CONFIG.aiBasePaddleWidth +
+        (CONFIG.aiMaxPaddleWidth - CONFIG.aiBasePaddleWidth) *
+        aiSkill;
+}
+
+function getAIAimError() {
+    return CONFIG.aiInitialError +
+        (CONFIG.aiMinimumError - CONFIG.aiInitialError) *
+        aiSkill;
+}
+
+function advanceAISkill() {
+    aiAttempts++;
+
+    updateAISkill();
+
+    try {
+        localStorage.setItem(
+            "pong-ai-attempts",
+            String(aiAttempts)
+        );
+    } catch (error) {
+        console.error("AI progression save failed:", error);
+    }
+
+    console.log(
+        `AI Level ${aiLevel} | Skill ${(aiSkill * 100).toFixed(1)}%`
+    );
+
+    updateGameUI();
+}
+
+function loadAISkill() {
+    const savedAttempts = Number(
+        localStorage.getItem("pong-ai-attempts")
+    );
+
+    aiAttempts = Number.isFinite(savedAttempts)
+        ? Math.max(0, savedAttempts)
+        : 0;
+
+    updateAISkill();
+}
+
+
+// ============================================================
+// 5. REPLAY MEMORY
 // ============================================================
 
 class ReplayMemory {
@@ -241,7 +326,7 @@ class ReplayMemory {
 
 
 // ============================================================
-// 5. DQN AGENT
+// 6. DQN AGENT
 // ============================================================
 
 class DQNAgent {
@@ -256,7 +341,6 @@ class DQNAgent {
 
         this.model = null;
         this.target = null;
-
         this.ready = false;
     }
 
@@ -280,9 +364,7 @@ class DQNAgent {
         }));
 
         model.compile({
-            optimizer: tf.train.adam(
-                CONFIG.learningRate
-            ),
+            optimizer: tf.train.adam(CONFIG.learningRate),
             loss: "meanSquaredError"
         });
 
@@ -485,11 +567,7 @@ class DQNAgent {
 
             lastSavedUpdate = this.updates;
 
-            console.log(
-                "AI model saved.",
-                "Updates:",
-                this.updates
-            );
+            console.log("AI model saved:", this.updates);
 
         } catch (error) {
             console.error("Model save failed:", error);
@@ -502,7 +580,7 @@ class DQNAgent {
 
 
 // ============================================================
-// 6. GAME STATE
+// 7. GAME STATE
 // ============================================================
 
 function getLiveState() {
@@ -517,11 +595,8 @@ function getLiveState() {
 
 
 // ============================================================
-// 7. PREDICTIVE AI
+// 8. BALL PREDICTION
 // ============================================================
-
-// Calculate the ball's future X position,
-// including any number of side-wall reflections.
 
 function predictBallXAtY(targetY) {
     const minX = CONFIG.ballRadius;
@@ -562,7 +637,7 @@ function predictBallXAtY(targetY) {
 
 
 // ============================================================
-// 8. AI MOVEMENT
+// 9. AI MOVEMENT
 // ============================================================
 
 function moveAI() {
@@ -574,31 +649,30 @@ function moveAI() {
     let targetX;
 
     if (liveBall.vy < 0) {
-        // Ball is moving toward the AI.
-        // Predict its interception point.
         targetX = predictBallXAtY(targetY);
 
+        // Imperfect prediction at low levels.
+        targetX += aiAimOffset;
+
     } else {
-        // Ball is moving toward the player.
-        // Track its current horizontal position.
         targetX = liveBall.x;
     }
 
-    // Keep target within the arena.
+    const paddleWidth = getAIPaddleWidth();
+
     targetX = Math.max(
-        CONFIG.paddleWidth / 2,
+        paddleWidth / 2,
         Math.min(
-            CONFIG.width - CONFIG.paddleWidth / 2,
+            CONFIG.width - paddleWidth / 2,
             targetX
         )
     );
 
     const state = getLiveState();
 
-    // Basic controller action.
-    const difference = targetX - ai.x;
-
     let action = 1;
+
+    const difference = targetX - ai.x;
 
     if (difference < -2) {
         action = 0;
@@ -606,8 +680,7 @@ function moveAI() {
         action = 2;
     }
 
-    // Allow DQN to make a small adjustment
-    // only after sufficient learning.
+    // DQN influence increases gradually with progression.
     if (
         agent &&
         agent.ready &&
@@ -616,12 +689,14 @@ function moveAI() {
     ) {
         const learnedAction = agent.act(state);
 
-        targetX +=
+        const adjustment =
             (learnedAction - 1) *
-            CONFIG.maxAIAdjustment;
+            CONFIG.maxAIAdjustment *
+            aiSkill;
+
+        targetX += adjustment;
     }
 
-    // Record the actual steering direction.
     const finalDifference = targetX - ai.x;
 
     if (finalDifference < -2) {
@@ -635,11 +710,10 @@ function moveAI() {
     lastAIState = [...state];
     lastAIAction = action;
 
-    // Move toward the interception point.
     const movement = Math.max(
-        -CONFIG.aiSpeed,
+        -getAISpeed(),
         Math.min(
-            CONFIG.aiSpeed,
+            getAISpeed(),
             finalDifference
         )
     );
@@ -647,9 +721,9 @@ function moveAI() {
     ai.x += movement;
 
     ai.x = Math.max(
-        CONFIG.paddleWidth / 2,
+        paddleWidth / 2,
         Math.min(
-            CONFIG.width - CONFIG.paddleWidth / 2,
+            CONFIG.width - paddleWidth / 2,
             ai.x
         )
     );
@@ -657,7 +731,7 @@ function moveAI() {
 
 
 // ============================================================
-// 9. REAL GAME EXPERIENCE
+// 10. DQN EXPERIENCE
 // ============================================================
 
 function recordAIExperience(reward, done = false) {
@@ -684,7 +758,7 @@ function recordAIExperience(reward, done = false) {
 
 
 // ============================================================
-// 10. TRAIN AFTER SCORING
+// 11. TRAIN AFTER POINT
 // ============================================================
 
 async function trainAfterPoint() {
@@ -700,7 +774,6 @@ async function trainAfterPoint() {
         while (pendingTrainingEvents > 0) {
             pendingTrainingEvents--;
 
-            // At most one DQN update attempt per point.
             await agent.learnOnce();
 
             updateGameUI();
@@ -725,7 +798,7 @@ async function trainAfterPoint() {
 
 
 // ============================================================
-// 11. BALL RESET
+// 12. BALL RESET
 // ============================================================
 
 function resetLiveBall() {
@@ -744,12 +817,17 @@ function resetLiveBall() {
     liveBall.vy =
         verticalDirection * CONFIG.ballSpeed;
 
+    const error = getAIAimError();
+
+    aiAimOffset =
+        (Math.random() * 2 - 1) * error;
+
     lastAIState = null;
 }
 
 
 // ============================================================
-// 12. PLAYER MOVEMENT
+// 13. PLAYER MOVEMENT
 // ============================================================
 
 function movePlayer() {
@@ -772,7 +850,7 @@ function movePlayer() {
 
 
 // ============================================================
-// 13. COLLISION DETECTION
+// 14. COLLISION DETECTION
 // ============================================================
 
 function ballHitsPaddle(paddle, direction) {
@@ -788,11 +866,15 @@ function ballHitsPaddle(paddle, direction) {
     const ballBottom =
         liveBall.y + CONFIG.ballRadius;
 
+    const paddleWidth = paddle === ai
+        ? getAIPaddleWidth()
+        : CONFIG.paddleWidth;
+
     const paddleLeft =
-        paddle.x - CONFIG.paddleWidth / 2;
+        paddle.x - paddleWidth / 2;
 
     const paddleRight =
-        paddle.x + CONFIG.paddleWidth / 2;
+        paddle.x + paddleWidth / 2;
 
     const paddleTop =
         paddle.y - CONFIG.paddleHeight / 2;
@@ -824,12 +906,16 @@ function ballHitsPaddle(paddle, direction) {
 }
 
 function bounceBallFromPaddle(paddle, direction) {
+    const paddleWidth = paddle === ai
+        ? getAIPaddleWidth()
+        : CONFIG.paddleWidth;
+
     const offset = Math.max(
         -1,
         Math.min(
             1,
             (liveBall.x - paddle.x) /
-                (CONFIG.paddleWidth / 2)
+                (paddleWidth / 2)
         )
     );
 
@@ -838,7 +924,6 @@ function bounceBallFromPaddle(paddle, direction) {
     if (direction === "up") {
         liveBall.vy = Math.abs(liveBall.vy);
 
-        // Place ball just outside the AI paddle.
         liveBall.y =
             paddle.y +
             CONFIG.paddleHeight / 2 +
@@ -847,7 +932,6 @@ function bounceBallFromPaddle(paddle, direction) {
     } else {
         liveBall.vy = -Math.abs(liveBall.vy);
 
-        // Place ball just outside the player paddle.
         liveBall.y =
             paddle.y -
             CONFIG.paddleHeight / 2 -
@@ -859,7 +943,7 @@ function bounceBallFromPaddle(paddle, direction) {
 
 
 // ============================================================
-// 14. LIVE GAME PHYSICS
+// 15. LIVE GAME PHYSICS
 // ============================================================
 
 function moveLive() {
@@ -885,15 +969,13 @@ function moveLive() {
         playWallSound();
     }
 
-    // AI collision.
+    // AI paddle.
     if (ballHitsPaddle(ai, "up")) {
         bounceBallFromPaddle(ai, "up");
-
-        // AI successfully defended.
         recordAIExperience(1, false);
     }
 
-    // Player collision.
+    // Player paddle.
     if (ballHitsPaddle(player, "down")) {
         bounceBallFromPaddle(player, "down");
     }
@@ -903,6 +985,7 @@ function moveLive() {
         match.player++;
 
         recordAIExperience(-1, true);
+        advanceAISkill();
 
         playScoreSound();
         resetLiveBall();
@@ -918,6 +1001,8 @@ function moveLive() {
     ) {
         match.ai++;
 
+        advanceAISkill();
+
         playScoreSound();
         resetLiveBall();
 
@@ -928,7 +1013,7 @@ function moveLive() {
 
 
 // ============================================================
-// 15. DRAW ARENA
+// 16. DRAW ARENA
 // ============================================================
 
 function drawArena() {
@@ -945,13 +1030,7 @@ function drawArena() {
     );
 
     ctx.fillStyle = "#050505";
-
-    ctx.fillRect(
-        0,
-        0,
-        CONFIG.width,
-        CONFIG.height
-    );
+    ctx.fillRect(0, 0, CONFIG.width, CONFIG.height);
 
     // Center line.
     ctx.strokeStyle = "#333333";
@@ -966,12 +1045,14 @@ function drawArena() {
     ctx.setLineDash([]);
 
     // AI paddle.
+    const aiWidth = getAIPaddleWidth();
+
     ctx.fillStyle = "#c7ff4d";
 
     ctx.fillRect(
-        ai.x - CONFIG.paddleWidth / 2,
+        ai.x - aiWidth / 2,
         ai.y - CONFIG.paddleHeight / 2,
-        CONFIG.paddleWidth,
+        aiWidth,
         CONFIG.paddleHeight
     );
 
@@ -1009,12 +1090,7 @@ function drawArena() {
     ctx.font = "bold 32px monospace";
 
     ctx.fillStyle = "#c7ff4d";
-
-    ctx.fillText(
-        match.ai,
-        CONFIG.width / 2,
-        100
-    );
+    ctx.fillText(match.ai, CONFIG.width / 2, 100);
 
     ctx.fillStyle = "#ffffff";
 
@@ -1024,7 +1100,6 @@ function drawArena() {
         CONFIG.height - 85
     );
 
-    // Labels.
     ctx.font = "13px monospace";
     ctx.fillStyle = "#888888";
 
@@ -1039,7 +1114,7 @@ function drawArena() {
 
 
 // ============================================================
-// 16. GAME LOOP
+// 17. GAME LOOP
 // ============================================================
 
 function gameLoop(now) {
@@ -1061,7 +1136,7 @@ function gameLoop(now) {
 
 
 // ============================================================
-// 17. SCREEN MANAGEMENT
+// 18. SCREEN MANAGEMENT
 // ============================================================
 
 function showScreen(name) {
@@ -1096,7 +1171,7 @@ function hidePauseOverlay() {
 
 
 // ============================================================
-// 18. GAME CONTROL
+// 19. GAME CONTROL
 // ============================================================
 
 function startMatch() {
@@ -1186,7 +1261,8 @@ function endMatch() {
         playerRate,
         aiRate,
         duration: match.duration,
-        updates: agent ? agent.updates : 0
+        updates: agent ? agent.updates : 0,
+        aiLevel
     });
 
     if (statistics.history.length > 30) {
@@ -1207,7 +1283,7 @@ function endMatch() {
 
 
 // ============================================================
-// 19. STATISTICS STORAGE
+// 20. STATISTICS STORAGE
 // ============================================================
 
 function getAIRate() {
@@ -1261,6 +1337,11 @@ function loadStats() {
     }
 }
 
+
+// ============================================================
+// 21. UI UPDATE
+// ============================================================
+
 function updateGameUI() {
     const rate = getAIRate();
 
@@ -1275,7 +1356,8 @@ function updateGameUI() {
     }
 
     if ($("liveSpeed")) {
-        $("liveSpeed").textContent = "NORMAL";
+        $("liveSpeed").textContent =
+            `LV.${aiLevel}`;
     }
 
     if ($("statMatches")) {
@@ -1313,7 +1395,7 @@ function updateGameUI() {
 
 
 // ============================================================
-// 20. STATISTICS GRAPH
+// 22. STATISTICS GRAPH
 // ============================================================
 
 function getChartRate(item, key, scoreKey) {
@@ -1374,7 +1456,6 @@ function drawStatsChart() {
     const graphHeight =
         height - padding.top - padding.bottom;
 
-    // Grid.
     ctx.font = "11px monospace";
     ctx.textAlign = "right";
     ctx.fillStyle = "#888888";
@@ -1478,7 +1559,7 @@ function drawStatsChart() {
 
 
 // ============================================================
-// 21. CHART HOVER
+// 23. CHART HOVER
 // ============================================================
 
 function distanceToSegment(px, py, a, b) {
@@ -1620,6 +1701,10 @@ function setupChartHover() {
             <div style="color:#888888">
                 Total points: ${(item.ai || 0) + (item.player || 0)}
             </div>
+
+            <div style="color:#c7ff4d">
+                AI Level: ${item.aiLevel || "N/A"}
+            </div>
         `;
 
         tooltip.classList.remove("hidden");
@@ -1666,7 +1751,7 @@ function setupChartHover() {
 
 
 // ============================================================
-// 22. MODEL STATUS
+// 24. MODEL STATUS
 // ============================================================
 
 function updateModelStatus(message) {
@@ -1679,7 +1764,7 @@ function updateModelStatus(message) {
 
 
 // ============================================================
-// 23. INPUT
+// 25. INPUT
 // ============================================================
 
 function setupInput() {
@@ -1735,7 +1820,7 @@ function setupInput() {
 
 
 // ============================================================
-// 24. BUTTONS
+// 26. BUTTONS
 // ============================================================
 
 function setupButtons() {
@@ -1805,7 +1890,7 @@ function setupButtons() {
 
 
 // ============================================================
-// 25. INITIALIZATION
+// 27. INITIALIZATION
 // ============================================================
 
 async function init() {
@@ -1821,6 +1906,7 @@ async function init() {
         );
 
         loadStats();
+        loadAISkill();
 
         agent = new DQNAgent();
 
@@ -1836,6 +1922,8 @@ async function init() {
         updateGameUI();
 
         console.log("Pong AI initialized.");
+        console.log("AI Level:", aiLevel);
+        console.log("AI Attempts:", aiAttempts);
 
     } catch (error) {
         console.error(
