@@ -1,9 +1,11 @@
 
 "use strict";
 
-// ============================================================
-// 1. CONFIGURATION
-// ============================================================
+/* =========================================================
+   PONG AI - Progressive DQN Edition
+   Initial AI strength: approximately 30%
+   Learning: after every point
+   ========================================================= */
 
 const CONFIG = {
     width: 900,
@@ -16,71 +18,113 @@ const CONFIG = {
     playerSpeed: 8,
     ballSpeed: 5,
 
-    // AI progression
-    aiBaseSpeed: 4.5,
+    // AI starts at approximately 30% of its former initial speed.
+    aiBaseSpeed: 1.35,
     aiMaxSpeed: 9.5,
 
-    aiBasePaddleWidth: 88,
-    aiMaxPaddleWidth: 135,
+    // AI paddle grows as it learns.
+    aiBasePaddleWidth: 42,
+    aiMaxPaddleWidth: 125,
 
-    aiInitialError: 85,
-    aiMinimumError: 8,
+    // Large initial prediction error; decreases with progress.
+    aiInitialError: 190,
+    aiMinimumError: 5,
 
-    aiMaxLevel: 16,
-    aiAttemptsPerLevel: 3,
+    // One level per completed point, up to the maximum.
+    aiMaxLevel: 30,
 
     // DQN
     replayCapacity: 12000,
     batchSize: 32,
-    gamma: 0.97,
+    gamma: 0.95,
     learningRate: 0.0005,
 
-    epsilonStart: 0.25,
+    epsilonStart: 0.35,
     epsilonMin: 0.03,
-    epsilonDecay: 0.997,
+    epsilonDecay: 0.995,
 
     targetUpdateFrequency: 10,
-    saveFrequency: 10,
+    saveFrequency: 5,
 
-    learnedAIStart: 100,
-    maxAIAdjustment: 2
+    // Model influence gradually increases with training.
+    learnedAIStart: 10,
+
+    // Training workload after every point.
+    trainingBatchesPerPoint: 4
 };
 
-const MODEL_KEY = "pong-dqn-model-v5";
+const MODEL_KEY = "pong-dqn-model-v6";
+const STATS_KEY = "pong-statistics";
+const ATTEMPTS_KEY = "pong-ai-attempts";
+const PROGRESS_KEY = "pong-ai-progress";
+
+/* =========================================================
+   DOM
+   ========================================================= */
+
 const $ = id => document.getElementById(id);
 
+const canvas = $("arena");
+const ctx = canvas ? canvas.getContext("2d") : null;
 
-// ============================================================
-// 2. GLOBAL STATE
-// ============================================================
+const elements = {
+    menuScreen: $("menuScreen"),
+    gameScreen: $("gameScreen"),
+    statsScreen: $("statsScreen"),
+
+    playBtn: $("playBtn"),
+    statsBtn: $("statsBtn"),
+    statsBackBtn: $("statsBackBtn"),
+    gameMenuBtn: $("gameMenuBtn"),
+    endMatchBtn: $("endMatchBtn"),
+    newMatchBtn: $("newMatchBtn"),
+
+    pauseBtn: $("pauseBtn"),
+    resumeBtn: $("resumeBtn"),
+    pauseOverlay: $("pauseOverlay"),
+
+    modelStatus: $("modelStatus"),
+
+    liveRate: $("liveRate"),
+    liveUpdates: $("liveUpdates"),
+    liveSpeed: $("liveSpeed"),
+
+    statMatches: $("statMatches"),
+    statRate: $("statRate"),
+    statTime: $("statTime"),
+    statUpdates: $("statUpdates"),
+    statExperiences: $("statExperiences"),
+    statEpsilon: $("statEpsilon"),
+
+    statsChart: $("statsChart"),
+    chartTooltip: $("chartTooltip")
+};
+
+/* =========================================================
+   GAME STATE
+   ========================================================= */
 
 let screen = "menu";
-let paused = false;
 let running = false;
+let paused = false;
+let animationFrame = null;
 
-let raf = null;
 let agent = null;
-
-let saving = false;
 let trainingInProgress = false;
-let pendingTrainingEvents = 0;
+let pendingTraining = false;
 
-let lastSavedUpdate = 0;
-let lastStatsSave = 0;
+let aiAttempts = Number(localStorage.getItem(ATTEMPTS_KEY) || 0);
+let aiLevel = 1;
+let aiSkill = 0;
 
-let audioContext = null;
+let matchStartTime = 0;
+let matchDuration = 0;
 
-const keys = {
-    left: false,
-    right: false
-};
+let playerScore = 0;
+let aiScore = 0;
 
-let match = {
-    player: 0,
-    ai: 0,
-    startTime: 0,
-    duration: 0
-};
+let totalUpdates = 0;
+let totalExperiences = 0;
 
 let statistics = {
     matches: 0,
@@ -90,155 +134,108 @@ let statistics = {
     history: []
 };
 
-// Persistent progression
-let aiAttempts = 0;
-let aiLevel = 1;
-let aiSkill = 0;
-let aiAimOffset = 0;
-
-let liveBall = {
-    x: CONFIG.width / 2,
-    y: CONFIG.height / 2,
-    vx: CONFIG.ballSpeed,
-    vy: CONFIG.ballSpeed
-};
-
 let player = {
     x: CONFIG.width / 2,
-    y: CONFIG.height - 42
+    y: CONFIG.height - 45,
+    width: CONFIG.paddleWidth,
+    height: CONFIG.paddleHeight
 };
 
 let ai = {
     x: CONFIG.width / 2,
-    y: 35
+    y: 35,
+    width: CONFIG.aiBasePaddleWidth,
+    height: CONFIG.paddleHeight
+};
+
+let ball = {
+    x: CONFIG.width / 2,
+    y: CONFIG.height / 2,
+    vx: CONFIG.ballSpeed,
+    vy: CONFIG.ballSpeed,
+    radius: CONFIG.ballRadius
+};
+
+let keys = {
+    left: false,
+    right: false
 };
 
 let lastAIState = null;
 let lastAIAction = 1;
+let aiAimOffset = 0;
+let frameCounter = 0;
 
+/* =========================================================
+   AUDIO
+   ========================================================= */
 
-// ============================================================
-// 3. AUDIO
-// ============================================================
+let audioContext = null;
 
-function initAudio() {
-    if (!audioContext) {
-        const AudioContextClass =
-            window.AudioContext ||
-            window.webkitAudioContext;
-
-        if (AudioContextClass) {
-            audioContext = new AudioContextClass();
+function playSound(frequency = 440, duration = 0.06) {
+    try {
+        if (!audioContext) {
+            audioContext = new (
+                window.AudioContext ||
+                window.webkitAudioContext
+            )();
         }
+
+        if (audioContext.state === "suspended") {
+            audioContext.resume();
+        }
+
+        const oscillator = audioContext.createOscillator();
+        const gain = audioContext.createGain();
+
+        oscillator.type = "square";
+        oscillator.frequency.value = frequency;
+
+        gain.gain.setValueAtTime(0.045, audioContext.currentTime);
+        gain.gain.exponentialRampToValueAtTime(
+            0.001,
+            audioContext.currentTime + duration
+        );
+
+        oscillator.connect(gain);
+        gain.connect(audioContext.destination);
+
+        oscillator.start();
+        oscillator.stop(audioContext.currentTime + duration);
+    } catch (error) {
+        console.warn("Audio unavailable:", error);
     }
-
-    if (
-        audioContext &&
-        audioContext.state === "suspended"
-    ) {
-        audioContext.resume();
-    }
 }
 
-function playTone(
-    frequency,
-    duration,
-    volume = 0.04,
-    type = "square"
-) {
-    if (!audioContext) return;
-
-    const oscillator = audioContext.createOscillator();
-    const gain = audioContext.createGain();
-
-    oscillator.type = type;
-    oscillator.frequency.value = frequency;
-
-    gain.gain.setValueAtTime(
-        volume,
-        audioContext.currentTime
-    );
-
-    gain.gain.exponentialRampToValueAtTime(
-        0.001,
-        audioContext.currentTime + duration
-    );
-
-    oscillator.connect(gain);
-    gain.connect(audioContext.destination);
-
-    oscillator.start();
-    oscillator.stop(audioContext.currentTime + duration);
-}
-
-function playButtonSound() {
-    playTone(650, 0.06, 0.025);
-}
-
-function playWallSound() {
-    playTone(260, 0.045, 0.025);
-}
-
-function playPaddleSound() {
-    playTone(420, 0.07, 0.04);
-}
-
-function playScoreSound() {
-    playTone(520, 0.12, 0.05);
-
-    setTimeout(() => {
-        playTone(780, 0.15, 0.04);
-    }, 100);
-}
-
-function playStartSound() {
-    playTone(440, 0.1);
-
-    setTimeout(() => {
-        playTone(660, 0.1);
-    }, 100);
-}
-
-function playEndSound() {
-    playTone(300, 0.2);
-
-    setTimeout(() => {
-        playTone(200, 0.25);
-    }, 180);
-}
-
-
-// ============================================================
-// 4. AI PROGRESSION
-// ============================================================
+/* =========================================================
+   AI PROGRESSION
+   ========================================================= */
 
 function updateAISkill() {
     aiLevel = Math.min(
         CONFIG.aiMaxLevel,
-        Math.floor(
-            aiAttempts / CONFIG.aiAttemptsPerLevel
-        ) + 1
+        Math.max(1, aiAttempts + 1)
     );
 
-    aiSkill = Math.min(1, aiAttempts / 45);
+    aiSkill = Math.min(
+        1,
+        aiAttempts / (CONFIG.aiMaxLevel - 1)
+    );
 }
 
 function getAISpeed() {
     return CONFIG.aiBaseSpeed +
-        (CONFIG.aiMaxSpeed - CONFIG.aiBaseSpeed) *
-        aiSkill;
+        (CONFIG.aiMaxSpeed - CONFIG.aiBaseSpeed) * aiSkill;
 }
 
 function getAIPaddleWidth() {
     return CONFIG.aiBasePaddleWidth +
-        (CONFIG.aiMaxPaddleWidth - CONFIG.aiBasePaddleWidth) *
-        aiSkill;
+        (CONFIG.aiMaxPaddleWidth - CONFIG.aiBasePaddleWidth) * aiSkill;
 }
 
 function getAIAimError() {
     return CONFIG.aiInitialError +
-        (CONFIG.aiMinimumError - CONFIG.aiInitialError) *
-        aiSkill;
+        (CONFIG.aiMinimumError - CONFIG.aiInitialError) * aiSkill;
 }
 
 function advanceAISkill() {
@@ -246,38 +243,20 @@ function advanceAISkill() {
 
     updateAISkill();
 
-    try {
-        localStorage.setItem(
-            "pong-ai-attempts",
-            String(aiAttempts)
-        );
-    } catch (error) {
-        console.error("AI progression save failed:", error);
-    }
+    localStorage.setItem(ATTEMPTS_KEY, String(aiAttempts));
 
-    console.log(
-        `AI Level ${aiLevel} | Skill ${(aiSkill * 100).toFixed(1)}%`
-    );
+    localStorage.setItem(PROGRESS_KEY, JSON.stringify({
+        attempts: aiAttempts,
+        level: aiLevel,
+        skill: aiSkill
+    }));
 
     updateGameUI();
 }
 
-function loadAISkill() {
-    const savedAttempts = Number(
-        localStorage.getItem("pong-ai-attempts")
-    );
-
-    aiAttempts = Number.isFinite(savedAttempts)
-        ? Math.max(0, savedAttempts)
-        : 0;
-
-    updateAISkill();
-}
-
-
-// ============================================================
-// 5. REPLAY MEMORY
-// ============================================================
+/* =========================================================
+   REPLAY MEMORY
+   ========================================================= */
 
 class ReplayMemory {
     constructor(capacity) {
@@ -301,14 +280,14 @@ class ReplayMemory {
             this.memory[this.position] = experience;
         }
 
-        this.position =
-            (this.position + 1) % this.capacity;
+        this.position = (this.position + 1) % this.capacity;
     }
 
-    sample(batchSize) {
+    sample(size) {
         const result = [];
+        const count = Math.min(size, this.memory.length);
 
-        for (let i = 0; i < batchSize; i++) {
+        for (let i = 0; i < count; i++) {
             const index = Math.floor(
                 Math.random() * this.memory.length
             );
@@ -324,23 +303,21 @@ class ReplayMemory {
     }
 }
 
-
-// ============================================================
-// 6. DQN AGENT
-// ============================================================
+/* =========================================================
+   DQN AGENT
+   ========================================================= */
 
 class DQNAgent {
     constructor() {
-        this.memory = new ReplayMemory(
-            CONFIG.replayCapacity
-        );
+        this.memory = new ReplayMemory(CONFIG.replayCapacity);
 
         this.epsilon = CONFIG.epsilonStart;
         this.updates = 0;
         this.experiences = 0;
 
         this.model = null;
-        this.target = null;
+        this.targetModel = null;
+
         this.ready = false;
     }
 
@@ -372,70 +349,44 @@ class DQNAgent {
     }
 
     async initialize() {
+        this.model = this.createModel();
+        this.targetModel = this.createModel();
+
         try {
-            this.model = await tf.loadLayersModel(
+            const loaded = await tf.loadLayersModel(
                 `localstorage://${MODEL_KEY}`
             );
 
-            console.log("Previous AI model loaded.");
+            this.model.dispose();
+            this.model = loaded;
 
+            this.copyWeights();
         } catch (error) {
-            console.log("Creating a new AI model.");
-            this.model = this.createModel();
+            console.log("Starting a new AI model.");
         }
-
-        this.target = this.createModel();
-        this.copyWeights();
-
-        const epsilon = Number(
-            localStorage.getItem("pong-ai-epsilon")
-        );
-
-        const updates = Number(
-            localStorage.getItem("pong-ai-updates")
-        );
-
-        const experiences = Number(
-            localStorage.getItem("pong-ai-experiences")
-        );
-
-        if (Number.isFinite(epsilon) && epsilon > 0) {
-            this.epsilon = epsilon;
-        }
-
-        this.updates = Number.isFinite(updates)
-            ? updates
-            : 0;
-
-        this.experiences = Number.isFinite(experiences)
-            ? experiences
-            : 0;
 
         this.ready = true;
-
-        updateModelStatus("AI MODEL READY");
-        updateGameUI();
     }
 
     copyWeights() {
-        const weights = this.model.getWeights().map(
-            weight => weight.clone()
-        );
+        const weights = this.model.getWeights();
+        const copies = weights.map(weight => weight.clone());
 
-        try {
-            this.target.setWeights(weights);
-        } finally {
-            weights.forEach(weight => weight.dispose());
-        }
+        this.targetModel.setWeights(copies);
+
+        copies.forEach(weight => weight.dispose());
     }
 
-    act(state) {
-        if (!this.ready || !this.model) return 1;
+    chooseAction(state) {
+        if (!this.ready) return 1;
+
+        if (Math.random() < this.epsilon) {
+            return Math.floor(Math.random() * 3);
+        }
 
         return tf.tidy(() => {
             const input = tf.tensor2d([state]);
             const prediction = this.model.predict(input);
-
             return prediction.argMax(1).dataSync()[0];
         });
     }
@@ -450,19 +401,15 @@ class DQNAgent {
         );
 
         this.experiences++;
+        totalExperiences++;
     }
 
     async learnOnce() {
-        if (
-            !this.ready ||
-            this.memory.length < CONFIG.batchSize
-        ) {
-            return false;
+        if (!this.ready || this.memory.length < CONFIG.batchSize) {
+            return;
         }
 
-        const batch = this.memory.sample(
-            CONFIG.batchSize
-        );
+        const batch = this.memory.sample(CONFIG.batchSize);
 
         const states = batch.map(item => item.state);
         const nextStates = batch.map(item => item.nextState);
@@ -471,280 +418,238 @@ class DQNAgent {
         const rewards = batch.map(item => item.reward);
         const dones = batch.map(item => item.done);
 
-        let stateTensor;
-        let nextTensor;
-        let currentQ;
-        let nextQ;
-        let targetTensor;
+        const stateTensor = tf.tensor2d(states);
+        const nextStateTensor = tf.tensor2d(nextStates);
+
+        const currentQ = this.model.predict(stateTensor);
+        const nextQ = this.targetModel.predict(nextStateTensor);
+
+        const currentValues = await currentQ.array();
+        const nextValues = await nextQ.array();
+
+        currentQ.dispose();
+        nextQ.dispose();
+
+        const targets = currentValues.map((values, i) => {
+            const updated = [...values];
+
+            const futureReward = Math.max(...nextValues[i]);
+
+            updated[actions[i]] = dones[i]
+                ? rewards[i]
+                : rewards[i] + CONFIG.gamma * futureReward;
+
+            return updated;
+        });
+
+        const targetTensor = tf.tensor2d(targets);
+
+        await this.model.fit(stateTensor, targetTensor, {
+            epochs: 1,
+            batchSize: CONFIG.batchSize,
+            shuffle: true,
+            verbose: 0
+        });
+
+        stateTensor.dispose();
+        nextStateTensor.dispose();
+        targetTensor.dispose();
+
+        this.updates++;
+        totalUpdates++;
+
+        this.epsilon = Math.max(
+            CONFIG.epsilonMin,
+            this.epsilon * CONFIG.epsilonDecay
+        );
+
+        if (this.updates % CONFIG.targetUpdateFrequency === 0) {
+            this.copyWeights();
+        }
+
+        updateGameUI();
+    }
+
+    async learnAfterPoint() {
+        if (!this.ready || trainingInProgress) {
+            pendingTraining = true;
+            return;
+        }
+
+        trainingInProgress = true;
 
         try {
-            stateTensor = tf.tensor2d(states);
-            nextTensor = tf.tensor2d(nextStates);
-
-            currentQ = this.model.predict(stateTensor);
-            nextQ = this.target.predict(nextTensor);
-
-            const currentValues = await currentQ.array();
-            const nextValues = await nextQ.array();
-
-            const targets = currentValues.map((values, i) => {
-                const nextMax = Math.max(...nextValues[i]);
-
-                const targetValue = dones[i]
-                    ? rewards[i]
-                    : rewards[i] +
-                        CONFIG.gamma * nextMax;
-
-                const updated = [...values];
-                updated[actions[i]] = targetValue;
-
-                return updated;
-            });
-
-            targetTensor = tf.tensor2d(targets);
-
-            await this.model.fit(
-                stateTensor,
-                targetTensor,
-                {
-                    epochs: 1,
-                    batchSize: CONFIG.batchSize,
-                    verbose: 0
-                }
-            );
-
-            this.updates++;
-
-            this.epsilon = Math.max(
-                CONFIG.epsilonMin,
-                this.epsilon * CONFIG.epsilonDecay
-            );
-
-            if (
-                this.updates %
-                CONFIG.targetUpdateFrequency === 0
+            for (
+                let i = 0;
+                i < CONFIG.trainingBatchesPerPoint;
+                i++
             ) {
-                this.copyWeights();
+                if (this.memory.length < CONFIG.batchSize) {
+                    break;
+                }
+
+                await this.learnOnce();
             }
 
-            return true;
-
+            if (this.updates > 0 &&
+                this.updates % CONFIG.saveFrequency === 0) {
+                await this.save();
+            }
+        } catch (error) {
+            console.error("Training error:", error);
         } finally {
-            tf.dispose([
-                stateTensor,
-                nextTensor,
-                currentQ,
-                nextQ,
-                targetTensor
-            ].filter(Boolean));
+            trainingInProgress = false;
+
+            if (pendingTraining) {
+                pendingTraining = false;
+                this.learnAfterPoint();
+            }
         }
     }
 
     async save() {
-        if (!this.ready || saving) return;
-
-        saving = true;
+        if (!this.ready) return;
 
         try {
-            await this.model.save(
-                `localstorage://${MODEL_KEY}`
-            );
-
-            localStorage.setItem(
-                "pong-ai-epsilon",
-                String(this.epsilon)
-            );
-
-            localStorage.setItem(
-                "pong-ai-updates",
-                String(this.updates)
-            );
-
-            localStorage.setItem(
-                "pong-ai-experiences",
-                String(this.experiences)
-            );
-
-            lastSavedUpdate = this.updates;
-
-            console.log("AI model saved:", this.updates);
-
+            await this.model.save(`localstorage://${MODEL_KEY}`);
         } catch (error) {
             console.error("Model save failed:", error);
-
-        } finally {
-            saving = false;
         }
     }
 }
 
-
-// ============================================================
-// 7. GAME STATE
-// ============================================================
+/* =========================================================
+   STATE AND PREDICTION
+   ========================================================= */
 
 function getLiveState() {
     return [
-        liveBall.x / CONFIG.width,
-        liveBall.y / CONFIG.height,
-        liveBall.vx / 10,
-        liveBall.vy / 10,
-        (liveBall.x - ai.x) / CONFIG.width
+        ball.x / CONFIG.width,
+        ball.y / CONFIG.height,
+        ball.vx / 10,
+        ball.vy / 10,
+        (ai.x - ball.x) / CONFIG.width
     ];
 }
 
-
-// ============================================================
-// 8. BALL PREDICTION
-// ============================================================
-
 function predictBallXAtY(targetY) {
-    const minX = CONFIG.ballRadius;
-    const maxX = CONFIG.width - CONFIG.ballRadius;
-    const range = maxX - minX;
-
-    if (liveBall.vy >= 0) {
-        return liveBall.x;
+    if (ball.vy <= 0) {
+        return ball.x;
     }
 
-    const distanceY = liveBall.y - targetY;
+    const time = (targetY - ball.y) / ball.vy;
 
-    if (distanceY <= 0) {
-        return liveBall.x;
+    if (time <= 0) {
+        return ball.x;
     }
 
-    const time =
-        distanceY / Math.abs(liveBall.vy);
+    let predicted = ball.x + ball.vx * time;
 
-    const projectedX =
-        liveBall.x + liveBall.vx * time;
+    const left = CONFIG.ballRadius;
+    const right = CONFIG.width - CONFIG.ballRadius;
+    const range = right - left;
 
-    const period = range * 2;
+    let relative = (predicted - left) % (range * 2);
 
-    let position =
-        (projectedX - minX) % period;
-
-    if (position < 0) {
-        position += period;
+    if (relative < 0) {
+        relative += range * 2;
     }
 
-    if (position > range) {
-        position = period - position;
+    if (relative > range) {
+        relative = range * 2 - relative;
     }
 
-    return minX + position;
+    return left + relative;
 }
 
-
-// ============================================================
-// 9. AI MOVEMENT
-// ============================================================
+/* =========================================================
+   AI MOVEMENT
+   ========================================================= */
 
 function moveAI() {
-    const targetY =
-        ai.y +
-        CONFIG.paddleHeight / 2 +
-        CONFIG.ballRadius;
+    ai.width = getAIPaddleWidth();
+
+    const currentState = getLiveState();
 
     let targetX;
 
-    if (liveBall.vy < 0) {
-        targetX = predictBallXAtY(targetY);
-
-        // Imperfect prediction at low levels.
-        targetX += aiAimOffset;
-
+    if (ball.vy < 0) {
+        // When the ball moves away, AI follows slowly.
+        targetX = ball.x;
     } else {
-        targetX = liveBall.x;
+        const predictedX = predictBallXAtY(ai.y);
+
+        // Initially the AI does not predict accurately.
+        const error = getAIAimError();
+
+        const noisyPrediction =
+            predictedX + aiAimOffset * (1 - aiSkill);
+
+        // Gradually switch from current-position tracking
+        // to future-position prediction.
+        const predictionWeight = 0.3 + aiSkill * 0.7;
+
+        targetX =
+            ball.x * (1 - predictionWeight) +
+            noisyPrediction * predictionWeight;
+
+        // DQN output: 0 = left, 1 = stay, 2 = right.
+        if (
+            agent &&
+            agent.ready &&
+            agent.updates >= CONFIG.learnedAIStart
+        ) {
+            const action = agent.chooseAction(currentState);
+
+            lastAIAction = action;
+
+            const learningInfluence = Math.min(
+                1,
+                (agent.updates - CONFIG.learnedAIStart) / 100
+            );
+
+            const adjustment =
+                (action - 1) * 45 * learningInfluence;
+
+            targetX += adjustment * aiSkill;
+        }
+
+        // Remaining uncertainty decreases as the AI improves.
+        targetX +=
+            (Math.random() - 0.5) * error * 0.12;
     }
 
-    const paddleWidth = getAIPaddleWidth();
+    const minimum = ai.width / 2;
+    const maximum = CONFIG.width - ai.width / 2;
 
     targetX = Math.max(
-        paddleWidth / 2,
-        Math.min(
-            CONFIG.width - paddleWidth / 2,
-            targetX
-        )
+        minimum,
+        Math.min(maximum, targetX)
     );
-
-    const state = getLiveState();
-
-    let action = 1;
 
     const difference = targetX - ai.x;
+    const speed = getAISpeed();
 
-    if (difference < -2) {
-        action = 0;
-    } else if (difference > 2) {
-        action = 2;
+    if (Math.abs(difference) > 2) {
+        ai.x += Math.sign(difference) *
+            Math.min(Math.abs(difference), speed);
     }
 
-    // DQN influence increases gradually with progression.
-    if (
-        agent &&
-        agent.ready &&
-        agent.updates >= CONFIG.learnedAIStart &&
-        agent.experiences >= 500
-    ) {
-        const learnedAction = agent.act(state);
-
-        const adjustment =
-            (learnedAction - 1) *
-            CONFIG.maxAIAdjustment *
-            aiSkill;
-
-        targetX += adjustment;
-    }
-
-    const finalDifference = targetX - ai.x;
-
-    if (finalDifference < -2) {
-        action = 0;
-    } else if (finalDifference > 2) {
-        action = 2;
-    } else {
-        action = 1;
-    }
-
-    lastAIState = [...state];
-    lastAIAction = action;
-
-    const movement = Math.max(
-        -getAISpeed(),
-        Math.min(
-            getAISpeed(),
-            finalDifference
-        )
-    );
-
-    ai.x += movement;
-
-    ai.x = Math.max(
-        paddleWidth / 2,
-        Math.min(
-            CONFIG.width - paddleWidth / 2,
-            ai.x
-        )
-    );
+    lastAIState = currentState;
 }
 
+/* =========================================================
+   EXPERIENCE RECORDING
+   ========================================================= */
 
-// ============================================================
-// 10. DQN EXPERIENCE
-// ============================================================
-
-function recordAIExperience(reward, done = false) {
-    if (
-        !agent ||
-        !agent.ready ||
-        !lastAIState
-    ) {
+function recordAIExperience(reward, done) {
+    if (!agent || !agent.ready || !lastAIState) {
         return;
     }
 
     const nextState = getLiveState();
 
+    // The reward is associated with the AI's latest action.
     agent.remember(
         lastAIState,
         lastAIAction,
@@ -756,81 +661,105 @@ function recordAIExperience(reward, done = false) {
     lastAIState = null;
 }
 
-
-// ============================================================
-// 11. TRAIN AFTER POINT
-// ============================================================
-
-async function trainAfterPoint() {
-    if (!agent || !agent.ready) return;
-
-    pendingTrainingEvents++;
-
-    if (trainingInProgress) return;
-
-    trainingInProgress = true;
-
-    try {
-        while (pendingTrainingEvents > 0) {
-            pendingTrainingEvents--;
-
-            await agent.learnOnce();
-
-            updateGameUI();
-
-            if (
-                agent.updates > 0 &&
-                agent.updates >=
-                    lastSavedUpdate + CONFIG.saveFrequency
-            ) {
-                await agent.save();
-            }
-        }
-
-    } catch (error) {
-        console.error("Training failed:", error);
-
-    } finally {
-        trainingInProgress = false;
-        updateGameUI();
-    }
-}
-
-
-// ============================================================
-// 12. BALL RESET
-// ============================================================
+/* =========================================================
+   BALL RESET
+   ========================================================= */
 
 function resetLiveBall() {
-    liveBall.x = CONFIG.width / 2;
-    liveBall.y = CONFIG.height / 2;
+    ball.x = CONFIG.width / 2;
+    ball.y = CONFIG.height / 2;
 
-    const horizontalDirection =
-        Math.random() < 0.5 ? -1 : 1;
+    const direction = Math.random() < 0.5 ? -1 : 1;
 
-    const verticalDirection =
-        Math.random() < 0.5 ? -1 : 1;
+    ball.vx = (Math.random() * 2 + 1) * direction;
+    ball.vy = CONFIG.ballSpeed *
+        (Math.random() < 0.5 ? -1 : 1);
 
-    liveBall.vx =
-        horizontalDirection * CONFIG.ballSpeed * 0.6;
-
-    liveBall.vy =
-        verticalDirection * CONFIG.ballSpeed;
-
-    const error = getAIAimError();
-
+    // A fixed error for this serve makes the initial AI
+    // visibly less accurate.
     aiAimOffset =
-        (Math.random() * 2 - 1) * error;
+        (Math.random() - 0.5) * getAIAimError() * 2;
 
     lastAIState = null;
+    lastAIAction = 1;
 }
 
+/* =========================================================
+   COLLISIONS
+   ========================================================= */
 
-// ============================================================
-// 13. PLAYER MOVEMENT
-// ============================================================
+function ballHitsPaddle(paddle) {
+    return (
+        ball.x + ball.radius > paddle.x - paddle.width / 2 &&
+        ball.x - ball.radius < paddle.x + paddle.width / 2 &&
+        ball.y + ball.radius > paddle.y - paddle.height / 2 &&
+        ball.y - ball.radius < paddle.y + paddle.height / 2
+    );
+}
 
-function movePlayer() {
+function bounceBallFromPaddle(paddle, isAI) {
+    const relative =
+        (ball.x - paddle.x) / (paddle.width / 2);
+
+    ball.vx = relative * 5;
+    ball.vy = isAI
+        ? Math.abs(ball.vy)
+        : -Math.abs(ball.vy);
+
+    ball.vy *= 1.02;
+
+    if (isAI) {
+        // Catching the ball is positive feedback.
+        recordAIExperience(1, false);
+    }
+
+    playSound(isAI ? 520 : 650);
+}
+
+/* =========================================================
+   POINT HANDLING
+   ========================================================= */
+
+async function finishPoint(playerWon) {
+    if (playerWon) {
+        playerScore++;
+        statistics.playerPoints++;
+
+        // AI failed to stop the player.
+        recordAIExperience(-1, true);
+
+        playSound(260, 0.15);
+    } else {
+        aiScore++;
+        statistics.aiPoints++;
+
+        // AI successfully scored.
+        recordAIExperience(1.5, true);
+
+        playSound(800, 0.15);
+    }
+
+    // Every completed point contributes to progression.
+    advanceAISkill();
+
+    // Train after every point, regardless of who scored.
+    if (agent) {
+        agent.learnAfterPoint();
+    }
+
+    updateGameUI();
+    resetLiveBall();
+}
+
+/* =========================================================
+   GAME PHYSICS
+   ========================================================= */
+
+function moveLive() {
+    if (!running || paused) return;
+
+    frameCounter++;
+
     if (keys.left) {
         player.x -= CONFIG.playerSpeed;
     }
@@ -840,460 +769,269 @@ function movePlayer() {
     }
 
     player.x = Math.max(
-        CONFIG.paddleWidth / 2,
-        Math.min(
-            CONFIG.width - CONFIG.paddleWidth / 2,
-            player.x
-        )
-    );
-}
-
-
-// ============================================================
-// 14. COLLISION DETECTION
-// ============================================================
-
-function ballHitsPaddle(paddle, direction) {
-    const ballLeft =
-        liveBall.x - CONFIG.ballRadius;
-
-    const ballRight =
-        liveBall.x + CONFIG.ballRadius;
-
-    const ballTop =
-        liveBall.y - CONFIG.ballRadius;
-
-    const ballBottom =
-        liveBall.y + CONFIG.ballRadius;
-
-    const paddleWidth = paddle === ai
-        ? getAIPaddleWidth()
-        : CONFIG.paddleWidth;
-
-    const paddleLeft =
-        paddle.x - paddleWidth / 2;
-
-    const paddleRight =
-        paddle.x + paddleWidth / 2;
-
-    const paddleTop =
-        paddle.y - CONFIG.paddleHeight / 2;
-
-    const paddleBottom =
-        paddle.y + CONFIG.paddleHeight / 2;
-
-    const horizontalOverlap =
-        ballRight >= paddleLeft &&
-        ballLeft <= paddleRight;
-
-    const verticalOverlap =
-        ballBottom >= paddleTop &&
-        ballTop <= paddleBottom;
-
-    if (!horizontalOverlap || !verticalOverlap) {
-        return false;
-    }
-
-    if (direction === "up" && liveBall.vy >= 0) {
-        return false;
-    }
-
-    if (direction === "down" && liveBall.vy <= 0) {
-        return false;
-    }
-
-    return true;
-}
-
-function bounceBallFromPaddle(paddle, direction) {
-    const paddleWidth = paddle === ai
-        ? getAIPaddleWidth()
-        : CONFIG.paddleWidth;
-
-    const offset = Math.max(
-        -1,
-        Math.min(
-            1,
-            (liveBall.x - paddle.x) /
-                (paddleWidth / 2)
-        )
+        player.width / 2,
+        Math.min(CONFIG.width - player.width / 2, player.x)
     );
 
-    liveBall.vx = offset * 5;
-
-    if (direction === "up") {
-        liveBall.vy = Math.abs(liveBall.vy);
-
-        liveBall.y =
-            paddle.y +
-            CONFIG.paddleHeight / 2 +
-            CONFIG.ballRadius;
-
-    } else {
-        liveBall.vy = -Math.abs(liveBall.vy);
-
-        liveBall.y =
-            paddle.y -
-            CONFIG.paddleHeight / 2 -
-            CONFIG.ballRadius;
-    }
-
-    playPaddleSound();
-}
-
-
-// ============================================================
-// 15. LIVE GAME PHYSICS
-// ============================================================
-
-function moveLive() {
     moveAI();
-    movePlayer();
 
-    liveBall.x += liveBall.vx;
-    liveBall.y += liveBall.vy;
+    ball.x += ball.vx;
+    ball.y += ball.vy;
 
-    // Left wall.
-    if (liveBall.x - CONFIG.ballRadius <= 0) {
-        liveBall.x = CONFIG.ballRadius;
-        liveBall.vx = Math.abs(liveBall.vx);
-        playWallSound();
-    }
-
-    // Right wall.
+    // Side walls.
     if (
-        liveBall.x + CONFIG.ballRadius >= CONFIG.width
+        ball.x - ball.radius <= 0 ||
+        ball.x + ball.radius >= CONFIG.width
     ) {
-        liveBall.x = CONFIG.width - CONFIG.ballRadius;
-        liveBall.vx = -Math.abs(liveBall.vx);
-        playWallSound();
+        ball.vx *= -1;
+        playSound(350);
     }
 
-    // AI paddle.
-    if (ballHitsPaddle(ai, "up")) {
-        bounceBallFromPaddle(ai, "up");
-        recordAIExperience(1, false);
+    // AI paddle collision.
+    if (ball.vy < 0 && ballHitsPaddle(ai)) {
+        ball.y = ai.y + ai.height / 2 + ball.radius;
+        bounceBallFromPaddle(ai, true);
     }
 
-    // Player paddle.
-    if (ballHitsPaddle(player, "down")) {
-        bounceBallFromPaddle(player, "down");
+    // Player paddle collision.
+    if (ball.vy > 0 && ballHitsPaddle(player)) {
+        ball.y = player.y - player.height / 2 - ball.radius;
+        bounceBallFromPaddle(player, false);
     }
 
-    // Player scores: AI missed.
-    if (liveBall.y < -CONFIG.ballRadius) {
-        match.player++;
-
-        recordAIExperience(-1, true);
-        advanceAISkill();
-
-        playScoreSound();
-        resetLiveBall();
-
-        trainAfterPoint();
-        updateGameUI();
+    // Player scores.
+    if (ball.y - ball.radius > CONFIG.height) {
+        finishPoint(true);
     }
 
-    // AI scores: player missed.
-    if (
-        liveBall.y >
-        CONFIG.height + CONFIG.ballRadius
-    ) {
-        match.ai++;
-
-        advanceAISkill();
-
-        playScoreSound();
-        resetLiveBall();
-
-        trainAfterPoint();
-        updateGameUI();
+    // AI scores.
+    if (ball.y + ball.radius < 0) {
+        finishPoint(false);
     }
 }
 
-
-// ============================================================
-// 16. DRAW ARENA
-// ============================================================
+/* =========================================================
+   DRAWING
+   ========================================================= */
 
 function drawArena() {
-    const canvas = $("arena");
-    if (!canvas) return;
+    if (!ctx) return;
 
-    const ctx = canvas.getContext("2d");
-
-    ctx.clearRect(
-        0,
-        0,
-        CONFIG.width,
-        CONFIG.height
-    );
+    ctx.clearRect(0, 0, CONFIG.width, CONFIG.height);
 
     ctx.fillStyle = "#050505";
     ctx.fillRect(0, 0, CONFIG.width, CONFIG.height);
 
     // Center line.
-    ctx.strokeStyle = "#333333";
-    ctx.lineWidth = 2;
-    ctx.setLineDash([12, 12]);
-
+    ctx.strokeStyle = "#444";
+    ctx.setLineDash([10, 12]);
     ctx.beginPath();
     ctx.moveTo(0, CONFIG.height / 2);
     ctx.lineTo(CONFIG.width, CONFIG.height / 2);
     ctx.stroke();
-
     ctx.setLineDash([]);
 
     // AI paddle.
-    const aiWidth = getAIPaddleWidth();
-
-    ctx.fillStyle = "#c7ff4d";
-
+    ctx.fillStyle = "#b6ff00";
     ctx.fillRect(
-        ai.x - aiWidth / 2,
-        ai.y - CONFIG.paddleHeight / 2,
-        aiWidth,
-        CONFIG.paddleHeight
+        ai.x - ai.width / 2,
+        ai.y - ai.height / 2,
+        ai.width,
+        ai.height
     );
 
     // Player paddle.
     ctx.fillStyle = "#ffffff";
-
     ctx.fillRect(
-        player.x - CONFIG.paddleWidth / 2,
-        player.y - CONFIG.paddleHeight / 2,
-        CONFIG.paddleWidth,
-        CONFIG.paddleHeight
+        player.x - player.width / 2,
+        player.y - player.height / 2,
+        player.width,
+        player.height
     );
 
     // Ball.
+    ctx.fillStyle = "#ffffff";
     ctx.beginPath();
-
-    ctx.arc(
-        liveBall.x,
-        liveBall.y,
-        CONFIG.ballRadius,
-        0,
-        Math.PI * 2
-    );
-
-    ctx.fillStyle = "#c7ff4d";
-    ctx.shadowColor = "#c7ff4d";
-    ctx.shadowBlur = 12;
-
+    ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
     ctx.fill();
 
-    ctx.shadowBlur = 0;
-
-    // Scores.
+    // Score.
+    ctx.fillStyle = "#b6ff00";
+    ctx.font = "bold 34px monospace";
     ctx.textAlign = "center";
-    ctx.font = "bold 32px monospace";
 
-    ctx.fillStyle = "#c7ff4d";
-    ctx.fillText(match.ai, CONFIG.width / 2, 100);
+    ctx.fillText(
+        aiScore,
+        CONFIG.width / 2 - 45,
+        CONFIG.height / 2 - 25
+    );
 
     ctx.fillStyle = "#ffffff";
 
     ctx.fillText(
-        match.player,
-        CONFIG.width / 2,
-        CONFIG.height - 85
-    );
-
-    ctx.font = "13px monospace";
-    ctx.fillStyle = "#888888";
-
-    ctx.fillText("AI", 55, 40);
-
-    ctx.fillText(
-        "PLAYER",
-        65,
-        CONFIG.height - 25
+        playerScore,
+        CONFIG.width / 2 + 45,
+        CONFIG.height / 2 + 55
     );
 }
 
+/* =========================================================
+   GAME LOOP
+   ========================================================= */
 
-// ============================================================
-// 17. GAME LOOP
-// ============================================================
-
-function gameLoop(now) {
-    if (screen !== "game") return;
+function gameLoop() {
+    if (!running) return;
 
     if (!paused) {
         moveLive();
-
-        if (now - lastStatsSave > 5000) {
-            saveStats();
-            lastStatsSave = now;
-        }
+        drawArena();
     }
 
-    drawArena();
-
-    raf = requestAnimationFrame(gameLoop);
+    animationFrame = requestAnimationFrame(gameLoop);
 }
 
-
-// ============================================================
-// 18. SCREEN MANAGEMENT
-// ============================================================
+/* =========================================================
+   SCREEN MANAGEMENT
+   ========================================================= */
 
 function showScreen(name) {
-    const screens = [
-        "menuScreen",
-        "gameScreen",
-        "statsScreen"
-    ];
+    screen = name;
 
-    screens.forEach(id => {
-        $(id)?.classList.add("hidden");
-    });
+    if (elements.menuScreen) {
+        elements.menuScreen.style.display =
+            name === "menu" ? "flex" : "none";
+    }
 
-    const target = {
-        menu: "menuScreen",
-        game: "gameScreen",
-        stats: "statsScreen"
-    }[name];
+    if (elements.gameScreen) {
+        elements.gameScreen.style.display =
+            name === "game" ? "flex" : "none";
+    }
 
-    if (target) {
-        $(target)?.classList.remove("hidden");
+    if (elements.statsScreen) {
+        elements.statsScreen.style.display =
+            name === "stats" ? "flex" : "none";
     }
 }
-
-function showPauseOverlay() {
-    $("pauseOverlay")?.classList.remove("hidden");
-}
-
-function hidePauseOverlay() {
-    $("pauseOverlay")?.classList.add("hidden");
-}
-
-
-// ============================================================
-// 19. GAME CONTROL
-// ============================================================
 
 function startMatch() {
-    if (!agent || !agent.ready) {
-        updateModelStatus("AI IS STILL LOADING");
-        return;
-    }
-
-    screen = "game";
-    paused = false;
-    running = true;
-
-    match = {
-        player: 0,
-        ai: 0,
-        startTime: Date.now(),
-        duration: 0
-    };
+    playerScore = 0;
+    aiScore = 0;
 
     player.x = CONFIG.width / 2;
     ai.x = CONFIG.width / 2;
 
+    matchStartTime = Date.now();
+    matchDuration = 0;
+
     resetLiveBall();
 
-    showScreen("game");
-    hidePauseOverlay();
+    running = true;
+    paused = false;
 
-    playStartSound();
-
-    if (raf) {
-        cancelAnimationFrame(raf);
+    if (elements.pauseOverlay) {
+        elements.pauseOverlay.style.display = "none";
     }
 
-    raf = requestAnimationFrame(gameLoop);
+    showScreen("game");
 
-    updateGameUI();
+    if (animationFrame) {
+        cancelAnimationFrame(animationFrame);
+    }
+
+    gameLoop();
 }
 
 function pauseGame() {
-    if (screen !== "game") return;
+    if (!running) return;
 
-    paused = !paused;
+    paused = true;
 
-    if (paused) {
-        showPauseOverlay();
-    } else {
-        hidePauseOverlay();
+    if (elements.pauseOverlay) {
+        elements.pauseOverlay.style.display = "flex";
     }
-
-    updateGameUI();
 }
 
-function endMatch() {
+function resumeGame() {
+    if (!running) return;
+
+    paused = false;
+
+    if (elements.pauseOverlay) {
+        elements.pauseOverlay.style.display = "none";
+    }
+}
+
+async function endMatch() {
     if (!running) return;
 
     running = false;
     paused = false;
 
-    if (raf) {
-        cancelAnimationFrame(raf);
-        raf = null;
-    }
+    cancelAnimationFrame(animationFrame);
 
-    match.duration = Math.floor(
-        (Date.now() - match.startTime) / 1000
+    matchDuration = Math.floor(
+        (Date.now() - matchStartTime) / 1000
     );
 
     statistics.matches++;
-    statistics.playerPoints += match.player;
-    statistics.aiPoints += match.ai;
-    statistics.totalDuration += match.duration;
-
-    const totalPoints =
-        match.player + match.ai;
-
-    const aiRate = totalPoints > 0
-        ? match.ai / totalPoints * 100
-        : 0;
-
-    const playerRate = totalPoints > 0
-        ? match.player / totalPoints * 100
-        : 0;
+    statistics.totalDuration += matchDuration;
 
     statistics.history.push({
-        player: match.player,
-        ai: match.ai,
-        playerRate,
-        aiRate,
-        duration: match.duration,
-        updates: agent ? agent.updates : 0,
-        aiLevel
+        playerScore,
+        aiScore,
+        duration: matchDuration,
+        aiLevel,
+        date: new Date().toISOString()
     });
 
-    if (statistics.history.length > 30) {
+    if (statistics.history.length > 100) {
         statistics.history.shift();
     }
 
-    saveStats();
+    saveStatistics();
 
     if (agent) {
-        agent.save();
+        await agent.save();
     }
 
-    playEndSound();
-
-    screen = "menu";
     showScreen("menu");
 }
 
+/* =========================================================
+   STATISTICS
+   ========================================================= */
 
-// ============================================================
-// 20. STATISTICS STORAGE
-// ============================================================
+function loadStatistics() {
+    try {
+        const saved = localStorage.getItem(STATS_KEY);
 
-function getAIRate() {
+        if (saved) {
+            statistics = {
+                ...statistics,
+                ...JSON.parse(saved)
+            };
+        }
+    } catch (error) {
+        console.warn("Could not load statistics:", error);
+    }
+}
+
+function saveStatistics() {
+    localStorage.setItem(
+        STATS_KEY,
+        JSON.stringify(statistics)
+    );
+}
+
+function getWinRate() {
     const total =
-        statistics.playerPoints +
-        statistics.aiPoints;
+        statistics.playerPoints + statistics.aiPoints;
 
     if (total === 0) return 0;
 
-    return statistics.aiPoints / total * 100;
+    return Math.round(
+        statistics.playerPoints / total * 100
+    );
 }
 
 function formatTime(seconds) {
@@ -1303,636 +1041,354 @@ function formatTime(seconds) {
     return `${minutes}m ${remaining}s`;
 }
 
-function saveStats() {
-    try {
-        localStorage.setItem(
-            "pong-statistics",
-            JSON.stringify(statistics)
-        );
-    } catch (error) {
-        console.error("Statistics save failed:", error);
-    }
-}
-
-function loadStats() {
-    try {
-        const saved = localStorage.getItem(
-            "pong-statistics"
-        );
-
-        if (saved) {
-            const parsed = JSON.parse(saved);
-
-            statistics = {
-                ...statistics,
-                ...parsed
-            };
-
-            if (!Array.isArray(statistics.history)) {
-                statistics.history = [];
-            }
-        }
-    } catch (error) {
-        console.error("Statistics load failed:", error);
-    }
-}
-
-
-// ============================================================
-// 21. UI UPDATE
-// ============================================================
-
 function updateGameUI() {
-    const rate = getAIRate();
+    updateAISkill();
 
-    if ($("liveRate")) {
-        $("liveRate").textContent =
-            `${rate.toFixed(1)}%`;
+    if (elements.liveRate) {
+        elements.liveRate.textContent =
+            `${getWinRate()}%`;
     }
 
-    if ($("liveUpdates")) {
-        $("liveUpdates").textContent =
-            agent ? agent.updates : 0;
+    if (elements.liveUpdates) {
+        elements.liveUpdates.textContent =
+            agent ? agent.updates : totalUpdates;
     }
 
-    if ($("liveSpeed")) {
-        $("liveSpeed").textContent =
+    if (elements.liveSpeed) {
+        elements.liveSpeed.textContent =
             `LV.${aiLevel}`;
     }
 
-    if ($("statMatches")) {
-        $("statMatches").textContent =
+    if (elements.statMatches) {
+        elements.statMatches.textContent =
             statistics.matches;
     }
 
-    if ($("statRate")) {
-        $("statRate").textContent =
-            `${rate.toFixed(1)}%`;
+    if (elements.statRate) {
+        elements.statRate.textContent =
+            `${getWinRate()}%`;
     }
 
-    if ($("statTime")) {
-        $("statTime").textContent =
+    if (elements.statTime) {
+        elements.statTime.textContent =
             formatTime(statistics.totalDuration);
     }
 
-    if ($("statUpdates")) {
-        $("statUpdates").textContent =
-            agent ? agent.updates : 0;
+    if (elements.statUpdates) {
+        elements.statUpdates.textContent =
+            agent ? agent.updates : totalUpdates;
     }
 
-    if ($("statExperiences")) {
-        $("statExperiences").textContent =
-            agent ? agent.experiences : 0;
+    if (elements.statExperiences) {
+        elements.statExperiences.textContent =
+            agent ? agent.experiences : totalExperiences;
     }
 
-    if ($("statEpsilon")) {
-        $("statEpsilon").textContent =
-            agent ? agent.epsilon.toFixed(3) : "0.250";
+    if (elements.statEpsilon) {
+        elements.statEpsilon.textContent =
+            agent ? agent.epsilon.toFixed(3) : "0.350";
     }
-
-    drawStatsChart();
 }
 
+/* =========================================================
+   STATISTICS CHART
+   ========================================================= */
 
-// ============================================================
-// 22. STATISTICS GRAPH
-// ============================================================
+function drawStatisticsChart() {
+    const chart = elements.statsChart;
 
-function getChartRate(item, key, scoreKey) {
-    if (Number.isFinite(item[key])) {
-        return item[key];
-    }
+    if (!chart) return;
 
-    const total =
-        (item.player || 0) + (item.ai || 0);
+    const chartCtx = chart.getContext("2d");
 
-    return total > 0
-        ? (item[scoreKey] || 0) / total * 100
-        : 0;
-}
+    const width = chart.width;
+    const height = chart.height;
 
-function drawStatsChart() {
-    const canvas = $("statsChart");
-    if (!canvas) return;
+    chartCtx.clearRect(0, 0, width, height);
 
-    const ctx = canvas.getContext("2d");
+    chartCtx.fillStyle = "#080808";
+    chartCtx.fillRect(0, 0, width, height);
 
-    const width = canvas.width;
-    const height = canvas.height;
-
-    ctx.clearRect(0, 0, width, height);
-
-    ctx.fillStyle = "#080808";
-    ctx.fillRect(0, 0, width, height);
-
-    const history = statistics.history || [];
-
-    canvas.chartSeries = [];
+    const history = statistics.history;
 
     if (history.length === 0) {
-        ctx.fillStyle = "#888888";
-        ctx.font = "14px monospace";
-        ctx.textAlign = "center";
-
-        ctx.fillText(
+        chartCtx.fillStyle = "#888";
+        chartCtx.font = "14px monospace";
+        chartCtx.textAlign = "center";
+        chartCtx.fillText(
             "NO MATCH DATA",
             width / 2,
             height / 2
         );
-
         return;
     }
 
-    const padding = {
-        left: 55,
-        right: 25,
-        top: 25,
-        bottom: 40
-    };
+    const padding = 35;
+    const graphWidth = width - padding * 2;
+    const graphHeight = height - padding * 2;
 
-    const graphWidth =
-        width - padding.left - padding.right;
+    chartCtx.strokeStyle = "#444";
+    chartCtx.lineWidth = 1;
 
-    const graphHeight =
-        height - padding.top - padding.bottom;
+    for (let i = 0; i <= 4; i++) {
+        const y = padding + graphHeight * i / 4;
 
-    ctx.font = "11px monospace";
-    ctx.textAlign = "right";
-    ctx.fillStyle = "#888888";
-
-    for (
-        let percentage = 0;
-        percentage <= 100;
-        percentage += 20
-    ) {
-        const y = padding.top +
-            graphHeight * (1 - percentage / 100);
-
-        ctx.strokeStyle = "#252525";
-        ctx.lineWidth = 1;
-
-        ctx.beginPath();
-        ctx.moveTo(padding.left, y);
-        ctx.lineTo(width - padding.right, y);
-        ctx.stroke();
-
-        ctx.fillText(
-            `${percentage}%`,
-            padding.left - 10,
-            y + 4
-        );
+        chartCtx.beginPath();
+        chartCtx.moveTo(padding, y);
+        chartCtx.lineTo(width - padding, y);
+        chartCtx.stroke();
     }
 
-    const series = [
-        {
-            key: "playerRate",
-            scoreKey: "player",
-            name: "PLAYER",
-            color: "#ffffff"
-        },
-        {
-            key: "aiRate",
-            scoreKey: "ai",
-            name: "AI",
-            color: "#c7ff4d"
-        }
-    ];
-
-    series.forEach(item => {
-        item.points = history.map((matchItem, index) => {
-            const rate = getChartRate(
-                matchItem,
-                item.key,
-                item.scoreKey
-            );
-
-            const x = history.length === 1
-                ? padding.left + graphWidth / 2
-                : padding.left +
-                    index / (history.length - 1) *
-                    graphWidth;
-
-            const y = padding.top +
-                graphHeight * (1 - rate / 100);
-
-            return { x, y, rate };
-        });
-
-        ctx.strokeStyle = item.color;
-        ctx.lineWidth = 2.5;
-        ctx.lineJoin = "round";
-        ctx.lineCap = "round";
-
-        ctx.beginPath();
-
-        item.points.forEach((point, index) => {
-            if (index === 0) {
-                ctx.moveTo(point.x, point.y);
-            } else {
-                ctx.lineTo(point.x, point.y);
-            }
-        });
-
-        ctx.stroke();
-
-        item.points.forEach(point => {
-            ctx.fillStyle = item.color;
-
-            ctx.beginPath();
-            ctx.arc(point.x, point.y, 4, 0, Math.PI * 2);
-            ctx.fill();
-        });
-    });
-
-    canvas.chartSeries = series;
-
-    ctx.fillStyle = "#888888";
-    ctx.font = "10px monospace";
-    ctx.textAlign = "center";
-
-    ctx.fillText(
-        "MATCH PROGRESSION",
-        width / 2,
-        height - 8
-    );
-}
-
-
-// ============================================================
-// 23. CHART HOVER
-// ============================================================
-
-function distanceToSegment(px, py, a, b) {
-    const dx = b.x - a.x;
-    const dy = b.y - a.y;
-
-    const lengthSquared = dx * dx + dy * dy;
-
-    if (lengthSquared === 0) {
-        return Math.hypot(px - a.x, py - a.y);
-    }
-
-    const t = Math.max(
-        0,
-        Math.min(
-            1,
-            ((px - a.x) * dx + (py - a.y) * dy) /
-                lengthSquared
+    const maxPoints = Math.max(
+        1,
+        ...history.map(item =>
+            Math.max(item.playerScore, item.aiScore)
         )
     );
 
-    const nearestX = a.x + t * dx;
-    const nearestY = a.y + t * dy;
+    function drawLine(key, color) {
+        chartCtx.beginPath();
+        chartCtx.strokeStyle = color;
+        chartCtx.lineWidth = 2;
 
-    return Math.hypot(
-        px - nearestX,
-        py - nearestY
-    );
-}
+        history.forEach((item, index) => {
+            const x = padding +
+                (history.length === 1
+                    ? graphWidth / 2
+                    : graphWidth * index / (history.length - 1));
 
-function setupChartHover() {
-    const canvas = $("statsChart");
-    const tooltip = $("chartTooltip");
+            const y = height - padding -
+                (item[key] / maxPoints) * graphHeight;
 
-    if (!canvas || !tooltip) return;
-
-    canvas.addEventListener("mousemove", event => {
-        const rect = canvas.getBoundingClientRect();
-
-        const mouseX =
-            (event.clientX - rect.left) *
-            canvas.width / rect.width;
-
-        const mouseY =
-            (event.clientY - rect.top) *
-            canvas.height / rect.height;
-
-        const seriesList = canvas.chartSeries || [];
-
-        let nearest = null;
-        let minimumDistance = 12;
-
-        seriesList.forEach(series => {
-            const points = series.points;
-
-            if (!points || points.length === 0) return;
-
-            if (points.length === 1) {
-                const p = points[0];
-
-                const distance = Math.hypot(
-                    mouseX - p.x,
-                    mouseY - p.y
-                );
-
-                if (distance < minimumDistance) {
-                    minimumDistance = distance;
-
-                    nearest = {
-                        series,
-                        index: 0
-                    };
-                }
-
-                return;
-            }
-
-            for (let i = 0; i < points.length - 1; i++) {
-                const distance = distanceToSegment(
-                    mouseX,
-                    mouseY,
-                    points[i],
-                    points[i + 1]
-                );
-
-                if (distance < minimumDistance) {
-                    minimumDistance = distance;
-
-                    const d1 = Math.hypot(
-                        mouseX - points[i].x,
-                        mouseY - points[i].y
-                    );
-
-                    const d2 = Math.hypot(
-                        mouseX - points[i + 1].x,
-                        mouseY - points[i + 1].y
-                    );
-
-                    nearest = {
-                        series,
-                        index: d1 <= d2 ? i : i + 1
-                    };
-                }
+            if (index === 0) {
+                chartCtx.moveTo(x, y);
+            } else {
+                chartCtx.lineTo(x, y);
             }
         });
 
-        if (!nearest) {
-            tooltip.classList.add("hidden");
-            canvas.style.cursor = "default";
-            return;
-        }
+        chartCtx.stroke();
+    }
 
-        const { series, index } = nearest;
-        const item = statistics.history[index];
+    drawLine("playerScore", "#ffffff");
+    drawLine("aiScore", "#b6ff00");
+}
 
-        const rate = getChartRate(
-            item,
-            series.key,
-            series.scoreKey
+function setupChartHover() {
+    const chart = elements.statsChart;
+    const tooltip = elements.chartTooltip;
+
+    if (!chart || !tooltip) return;
+
+    chart.addEventListener("mousemove", event => {
+        const history = statistics.history;
+
+        if (!history.length) return;
+
+        const rect = chart.getBoundingClientRect();
+
+        const relativeX =
+            (event.clientX - rect.left) / rect.width;
+
+        const index = Math.round(
+            relativeX * (history.length - 1)
         );
 
-        const score = series.scoreKey === "ai"
-            ? item.ai
-            : item.player;
+        const item = history[
+            Math.max(0, Math.min(history.length - 1, index))
+        ];
 
-        tooltip.innerHTML = `
-            <div class="tooltip-title">
-                ${series.name}
-            </div>
+        if (!item) return;
 
-            <div>Match: ${index + 1}</div>
-
-            <div>Score: ${score}</div>
-
-            <div style="color:${series.color}">
-                Rate: ${rate.toFixed(1)}%
-            </div>
-
-            <div style="color:#888888">
-                Total points: ${(item.ai || 0) + (item.player || 0)}
-            </div>
-
-            <div style="color:#c7ff4d">
-                AI Level: ${item.aiLevel || "N/A"}
-            </div>
-        `;
-
-        tooltip.classList.remove("hidden");
-
-        const container =
-            canvas.closest(".chart-container");
-
-        const containerRect =
-            container.getBoundingClientRect();
-
-        const tooltipWidth = tooltip.offsetWidth;
-        const tooltipHeight = tooltip.offsetHeight;
-
-        let left =
-            event.clientX - containerRect.left + 15;
-
-        let top =
-            event.clientY - containerRect.top + 15;
-
-        left = Math.min(
-            left,
-            container.clientWidth - tooltipWidth - 8
-        );
-
-        top = Math.min(
-            top,
-            container.clientHeight - tooltipHeight - 8
-        );
+        tooltip.style.display = "block";
+        tooltip.textContent =
+            `Player: ${item.playerScore} | ` +
+            `AI: ${item.aiScore} | ` +
+            `AI Level: ${item.aiLevel}`;
 
         tooltip.style.left =
-            `${Math.max(8, left)}px`;
+            `${event.clientX - rect.left + 10}px`;
 
         tooltip.style.top =
-            `${Math.max(8, top)}px`;
-
-        canvas.style.cursor = "crosshair";
+            `${event.clientY - rect.top + 10}px`;
     });
 
-    canvas.addEventListener("mouseleave", () => {
-        tooltip.classList.add("hidden");
-        canvas.style.cursor = "default";
+    chart.addEventListener("mouseleave", () => {
+        tooltip.style.display = "none";
     });
 }
 
+function showStatistics() {
+    showScreen("stats");
+    updateGameUI();
+    drawStatisticsChart();
+}
 
-// ============================================================
-// 24. MODEL STATUS
-// ============================================================
+/* =========================================================
+   KEYBOARD
+   ========================================================= */
 
-function updateModelStatus(message) {
-    const element = $("modelStatus");
+document.addEventListener("keydown", event => {
+    if (
+        event.key === "ArrowLeft" ||
+        event.key.toLowerCase() === "a"
+    ) {
+        keys.left = true;
+    }
 
-    if (element) {
-        element.textContent = message;
+    if (
+        event.key === "ArrowRight" ||
+        event.key.toLowerCase() === "d"
+    ) {
+        keys.right = true;
+    }
+
+    if (event.key === "Escape" && running) {
+        if (paused) {
+            resumeGame();
+        } else {
+            pauseGame();
+        }
+    }
+});
+
+document.addEventListener("keyup", event => {
+    if (
+        event.key === "ArrowLeft" ||
+        event.key.toLowerCase() === "a"
+    ) {
+        keys.left = false;
+    }
+
+    if (
+        event.key === "ArrowRight" ||
+        event.key.toLowerCase() === "d"
+    ) {
+        keys.right = false;
+    }
+});
+
+/* =========================================================
+   BUTTONS
+   ========================================================= */
+
+function setupButtons() {
+    if (elements.playBtn) {
+        elements.playBtn.addEventListener("click", startMatch);
+    }
+
+    if (elements.newMatchBtn) {
+        elements.newMatchBtn.addEventListener("click", startMatch);
+    }
+
+    if (elements.statsBtn) {
+        elements.statsBtn.addEventListener("click", showStatistics);
+    }
+
+    if (elements.statsBackBtn) {
+        elements.statsBackBtn.addEventListener("click", () => {
+            showScreen("menu");
+        });
+    }
+
+    if (elements.gameMenuBtn) {
+        elements.gameMenuBtn.addEventListener("click", endMatch);
+    }
+
+    if (elements.endMatchBtn) {
+        elements.endMatchBtn.addEventListener("click", endMatch);
+    }
+
+    if (elements.pauseBtn) {
+        elements.pauseBtn.addEventListener("click", pauseGame);
+    }
+
+    if (elements.resumeBtn) {
+        elements.resumeBtn.addEventListener("click", resumeGame);
+    }
+
+    if (elements.resetStatsBtn) {
+        elements.resetStatsBtn.addEventListener("click", () => {
+            if (!confirm("Reset all statistics?")) return;
+
+            statistics = {
+                matches: 0,
+                playerPoints: 0,
+                aiPoints: 0,
+                totalDuration: 0,
+                history: []
+            };
+
+            saveStatistics();
+            updateGameUI();
+            drawStatisticsChart();
+        });
     }
 }
 
-
-// ============================================================
-// 25. INPUT
-// ============================================================
-
-function setupInput() {
-    document.addEventListener("keydown", event => {
-        const key = event.key.toLowerCase();
-
-        if (
-            event.key === "ArrowLeft" ||
-            key === "a"
-        ) {
-            keys.left = true;
-        }
-
-        if (
-            event.key === "ArrowRight" ||
-            key === "d"
-        ) {
-            keys.right = true;
-        }
-
-        if (event.code === "Space") {
-            event.preventDefault();
-
-            if (screen === "game") {
-                pauseGame();
-            }
-        }
-    });
-
-    document.addEventListener("keyup", event => {
-        const key = event.key.toLowerCase();
-
-        if (
-            event.key === "ArrowLeft" ||
-            key === "a"
-        ) {
-            keys.left = false;
-        }
-
-        if (
-            event.key === "ArrowRight" ||
-            key === "d"
-        ) {
-            keys.right = false;
-        }
-    });
-
-    window.addEventListener("blur", () => {
-        keys.left = false;
-        keys.right = false;
-    });
-}
-
-
-// ============================================================
-// 26. BUTTONS
-// ============================================================
-
-function setupButtons() {
-    $("playBtn")?.addEventListener("click", () => {
-        initAudio();
-        startMatch();
-    });
-
-    $("statsBtn")?.addEventListener("click", () => {
-        initAudio();
-
-        screen = "stats";
-
-        showScreen("stats");
-        updateGameUI();
-    });
-
-    $("statsBackBtn")?.addEventListener("click", () => {
-        screen = "menu";
-        showScreen("menu");
-    });
-
-    $("gameMenuBtn")?.addEventListener("click", () => {
-        endMatch();
-    });
-
-    $("endMatchBtn")?.addEventListener("click", () => {
-        endMatch();
-    });
-
-    $("newMatchBtn")?.addEventListener("click", () => {
-        startMatch();
-    });
-
-    $("pauseBtn")?.addEventListener("click", () => {
-        pauseGame();
-    });
-
-    $("resumeBtn")?.addEventListener("click", () => {
-        if (paused) {
-            pauseGame();
-        }
-    });
-
-    $("resetStatsBtn")?.addEventListener("click", () => {
-        statistics = {
-            matches: 0,
-            playerPoints: 0,
-            aiPoints: 0,
-            totalDuration: 0,
-            history: []
-        };
-
-        saveStats();
-        updateGameUI();
-    });
-
-    document.addEventListener("click", event => {
-        const button = event.target.closest("button");
-
-        if (button) {
-            initAudio();
-            playButtonSound();
-        }
-    }, true);
-}
-
-
-// ============================================================
-// 27. INITIALIZATION
-// ============================================================
+/* =========================================================
+   INITIALIZATION
+   ========================================================= */
 
 async function init() {
-    try {
-        updateModelStatus("INITIALIZING AI...");
+    if (!canvas || !ctx) {
+        console.error("Canvas element #arena was not found.");
+        return;
+    }
 
+    canvas.width = CONFIG.width;
+    canvas.height = CONFIG.height;
+
+    loadStatistics();
+    updateAISkill();
+
+    setupButtons();
+    setupChartHover();
+
+    if (typeof tf === "undefined") {
+        if (elements.modelStatus) {
+            elements.modelStatus.textContent =
+                "TensorFlow.js not loaded";
+        }
+
+        console.error("TensorFlow.js is unavailable.");
+        showScreen("menu");
+        return;
+    }
+
+    try {
         await tf.setBackend("cpu");
         await tf.ready();
-
-        console.log(
-            "TensorFlow backend:",
-            tf.getBackend()
-        );
-
-        loadStats();
-        loadAISkill();
 
         agent = new DQNAgent();
 
         await agent.initialize();
 
-        setupInput();
-        setupButtons();
-        setupChartHover();
-
-        showScreen("menu");
-
-        updateModelStatus("AI READY");
-        updateGameUI();
-
-        console.log("Pong AI initialized.");
-        console.log("AI Level:", aiLevel);
-        console.log("AI Attempts:", aiAttempts);
-
+        if (elements.modelStatus) {
+            elements.modelStatus.textContent =
+                "AI MODEL READY";
+        }
     } catch (error) {
-        console.error(
-            "Initialization failed:",
-            error
-        );
+        console.error("AI initialization failed:", error);
 
-        updateModelStatus("AI INITIALIZATION FAILED");
+        if (elements.modelStatus) {
+            elements.modelStatus.textContent =
+                "AI INITIALIZATION ERROR";
+        }
     }
+
+    updateGameUI();
+    showScreen("menu");
+
+    drawStatisticsChart();
+
+    console.log("Pong AI initialized.");
+    console.log("AI attempts:", aiAttempts);
+    console.log("AI level:", aiLevel);
 }
 
-document.addEventListener("DOMContentLoaded", init);
+if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", init);
+} else {
+    init();
+}
