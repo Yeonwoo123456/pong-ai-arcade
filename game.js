@@ -1,7 +1,8 @@
 
 /* ==========================================
    PONG AI ARCADE
-   Browser-based DQN Reinforcement Learning
+   DQN Reinforcement Learning
+   CPU Backend Version
    ========================================== */
 
 const $ = (id) => document.getElementById(id);
@@ -25,23 +26,19 @@ let raf = 0;
 let lastTime = 0;
 
 let speed = 10;
-let agent;
-let envs;
-let live;
-let stats;
-let match;
-let keys = {};
+let agent = null;
+let envs = null;
+let live = null;
+let stats = null;
+let match = null;
 
+let keys = {};
 let saving = false;
 
-const defaultStats = () => ({
-    matches: 0,
-    hits: 0,
-    attempts: 0,
-    seconds: 0,
-    experiences: 0,
-    history: []
-});
+
+/* ==========================================
+   UTILITIES
+   ========================================== */
 
 function clamp(value, min, max) {
     return Math.max(min, Math.min(max, value));
@@ -56,6 +53,28 @@ function reflect(x) {
     return BALL_R + (
         q <= span ? q : 2 * span - q
     );
+}
+
+function formatTime(seconds) {
+    const m = Math.floor(seconds / 60);
+    const s = Math.floor(seconds % 60);
+
+    return (
+        String(m).padStart(2, "0") +
+        ":" +
+        String(s).padStart(2, "0")
+    );
+}
+
+function defaultStats() {
+    return {
+        matches: 0,
+        hits: 0,
+        attempts: 0,
+        seconds: 0,
+        experiences: 0,
+        history: []
+    };
 }
 
 function loadStats() {
@@ -82,16 +101,10 @@ function saveStats() {
     }
 }
 
-function formatTime(seconds) {
-    const m = Math.floor(seconds / 60);
-    const s = Math.floor(seconds % 60);
 
-    return (
-        String(m).padStart(2, "0") +
-        ":" +
-        String(s).padStart(2, "0")
-    );
-}
+/* ==========================================
+   SCREEN MANAGEMENT
+   ========================================== */
 
 function show(name) {
     screen = name;
@@ -101,10 +114,18 @@ function show(name) {
         "gameScreen",
         "statsScreen"
     ].forEach(id => {
-        $(id).classList.add("hidden");
+        const element = $(id);
+
+        if (element) {
+            element.classList.add("hidden");
+        }
     });
 
-    $(`${name}Screen`).classList.remove("hidden");
+    const target = $(`${name}Screen`);
+
+    if (target) {
+        target.classList.remove("hidden");
+    }
 
     if (name === "stats") {
         drawStats();
@@ -172,7 +193,7 @@ class DQN {
 
         this.target.setWeights(weights);
 
-        weights.forEach(w => w.dispose());
+        weights.forEach(weight => weight.dispose());
     }
 
     act(state, explore = true) {
@@ -239,7 +260,6 @@ class DQN {
             const doneTensor = tf.tensor1d(dones);
 
             const nextQ = this.target.predict(nxs);
-
             const maxNextQ = nextQ.max(1);
 
             const targets = tf.tidy(() => {
@@ -251,9 +271,7 @@ class DQN {
             });
 
             const currentQ = this.model.predict(xs);
-
             const currentArray = currentQ.arraySync();
-
             const targetArray = targets.dataSync();
 
             for (let i = 0; i < this.batch; i++) {
@@ -272,7 +290,9 @@ class DQN {
 
             }, true);
 
-            if (loss) loss.dispose();
+            if (loss) {
+                loss.dispose();
+            }
 
             tf.dispose([
                 xs,
@@ -326,9 +346,10 @@ class DQN {
 
         } catch (error) {
             console.warn("Model save failed:", error);
-        }
 
-        saving = false;
+        } finally {
+            saving = false;
+        }
     }
 
     async load() {
@@ -359,7 +380,9 @@ class DQN {
 
             return true;
 
-        } catch {
+        } catch (error) {
+            console.log("No saved AI model found. Starting new model.");
+
             return false;
         }
     }
@@ -380,7 +403,8 @@ class ParallelWorlds {
     resetOne(i) {
         this.x[i] = 100 + Math.random() * (W - 200);
 
-        this.y[i] = H * 0.4 + Math.random() * H * 0.35;
+        this.y[i] =
+            H * 0.4 + Math.random() * H * 0.35;
 
         this.vx[i] =
             (Math.random() < 0.5 ? -1 : 1) *
@@ -412,7 +436,10 @@ class ParallelWorlds {
             this.y[i] - (TOP + PADDLE_H + BALL_R)
         );
 
-        const t = distance / Math.max(0.1, -this.vy[i]);
+        const t = distance / Math.max(
+            0.1,
+            -this.vy[i]
+        );
 
         const intercept = reflect(
             this.x[i] + this.vx[i] * t
@@ -435,7 +462,6 @@ class ParallelWorlds {
         for (let i = 0; i < this.n; i++) {
 
             const oldState = this.state(i);
-
             const oldDistance = Math.abs(oldState[6]);
 
             // 0 = LEFT, 1 = STAY, 2 = RIGHT
@@ -448,7 +474,6 @@ class ParallelWorlds {
             this.x[i] += this.vx[i];
             this.y[i] += this.vy[i];
 
-            // Side wall collision
             if (
                 this.x[i] < BALL_R ||
                 this.x[i] > W - BALL_R
@@ -462,14 +487,15 @@ class ParallelWorlds {
                 );
             }
 
-            const topLine = this.y[i] <=
-                TOP + PADDLE_H + BALL_R;
+            const topLine =
+                this.y[i] <= TOP + PADDLE_H + BALL_R;
 
             const hit = topLine &&
                 Math.abs(this.x[i] - this.p[i]) <=
                 PADDLE_W / 2 + BALL_R;
 
-            const missed = this.y[i] <= TOP + BALL_R;
+            const missed =
+                this.y[i] <= TOP + BALL_R;
 
             let reward =
                 -0.002 -
@@ -478,9 +504,11 @@ class ParallelWorlds {
             if (hit) {
                 reward += 1;
 
-                this.y[i] = TOP + PADDLE_H + BALL_R + 1;
+                this.y[i] =
+                    TOP + PADDLE_H + BALL_R + 1;
 
-                this.vy[i] = Math.abs(this.vy[i]) * 1.01;
+                this.vy[i] =
+                    Math.abs(this.vy[i]) * 1.01;
 
                 this.vx[i] = clamp(
                     this.vx[i] +
@@ -501,7 +529,9 @@ class ParallelWorlds {
                 this.vy[i] *= -1;
             }
 
-            const done = missed || this.age[i] > 850;
+            const done =
+                (missed && !hit) ||
+                this.age[i] > 850;
 
             const nextState = this.state(i);
 
@@ -564,8 +594,17 @@ function newMatch() {
 
     paused = false;
 
-    $("pauseOverlay").classList.add("hidden");
-    $("pauseBtn").textContent = "Ⅱ PAUSE";
+    const overlay = $("pauseOverlay");
+
+    if (overlay) {
+        overlay.classList.add("hidden");
+    }
+
+    const pauseButton = $("pauseBtn");
+
+    if (pauseButton) {
+        pauseButton.textContent = "Ⅱ PAUSE";
+    }
 
     show("game");
 }
@@ -579,7 +618,11 @@ function getMatchSeconds() {
 
     return Math.max(
         0,
-        (now - match.started - match.pausedDuration) / 1000
+        (
+            now -
+            match.started -
+            match.pausedDuration
+        ) / 1000
     );
 }
 
@@ -654,7 +697,7 @@ function liveState() {
 
 function moveLive() {
 
-    // Human player: bottom paddle
+    // Human paddle: BOTTOM
     if (keys.ArrowLeft || keys.a || keys.A) {
         live.px -= 8;
     }
@@ -669,7 +712,7 @@ function moveLive() {
         W - PADDLE_W / 2
     );
 
-    // AI: top paddle
+    // AI paddle: TOP
     const action = agent.act(
         liveState(),
         false
@@ -681,11 +724,10 @@ function moveLive() {
         W - PADDLE_W / 2
     );
 
-    // Move ball
     live.x += live.vx;
     live.y += live.vy;
 
-    // Left and right walls
+    // Side walls
     if (
         live.x < BALL_R ||
         live.x > W - BALL_R
@@ -699,7 +741,7 @@ function moveLive() {
         );
     }
 
-    // AI paddle collision at the TOP
+    // AI paddle collision: TOP
     if (
         live.vy < 0 &&
         live.y - BALL_R <= TOP + PADDLE_H
@@ -730,7 +772,7 @@ function moveLive() {
         }
     }
 
-    // Human paddle collision at the BOTTOM
+    // Human paddle collision: BOTTOM
     if (
         live.vy > 0 &&
         live.y + BALL_R >= BOTTOM
@@ -767,12 +809,16 @@ function moveLive() {
 
 function drawArena() {
     const canvas = $("arena");
+
+    if (!canvas) return;
+
     const ctx = canvas.getContext("2d");
+
+    if (!ctx) return;
 
     ctx.fillStyle = "#050806";
     ctx.fillRect(0, 0, W, H);
 
-    // Outer border
     ctx.strokeStyle = "#dce8dc";
     ctx.lineWidth = 2;
 
@@ -795,7 +841,7 @@ function drawArena() {
 
     ctx.setLineDash([]);
 
-    // AI paddle at TOP
+    // AI paddle TOP
     ctx.fillStyle = "#edf4e9";
 
     ctx.fillRect(
@@ -805,7 +851,7 @@ function drawArena() {
         PADDLE_H
     );
 
-    // Player paddle at BOTTOM
+    // Player paddle BOTTOM
     ctx.fillRect(
         live.px - PADDLE_W / 2,
         BOTTOM - PADDLE_H,
@@ -858,17 +904,27 @@ function drawArena() {
    ========================================== */
 
 function updateGameUI() {
-    $("liveRate").textContent =
-        match.attempts
-            ? `${(
-                100 * match.hits / match.attempts
-            ).toFixed(1)}%`
-            : "—";
+    const rateElement = $("liveRate");
+    const updatesElement = $("liveUpdates");
+    const speedElement = $("liveSpeed");
 
-    $("liveUpdates").textContent =
-        agent.updates.toLocaleString();
+    if (rateElement) {
+        rateElement.textContent =
+            match.attempts
+                ? `${(
+                    100 * match.hits / match.attempts
+                ).toFixed(1)}%`
+                : "—";
+    }
 
-    $("liveSpeed").textContent = `${speed}×`;
+    if (updatesElement) {
+        updatesElement.textContent =
+            agent.updates.toLocaleString();
+    }
+
+    if (speedElement) {
+        speedElement.textContent = `${speed}×`;
+    }
 }
 
 
@@ -879,21 +935,11 @@ function updateGameUI() {
 async function gameLoop(now) {
     if (screen !== "game") return;
 
-    const dt = Math.min(
-        50,
-        now - lastTime || 16
-    );
-
     lastTime = now;
 
     if (!paused) {
 
-        /*
-         * Parallel simulated training.
-         * Each speed unit performs one training
-         * step across all simulated environments.
-         */
-
+        // Parallel simulated training
         for (let k = 0; k < speed; k++) {
 
             const states = envs.x.map(
@@ -919,7 +965,7 @@ async function gameLoop(now) {
 
         updateGameUI();
 
-        // Save model periodically
+        // Periodic model saving
         if (
             agent.updates > 0 &&
             agent.updates % 100 === 0
@@ -943,30 +989,34 @@ function drawStats() {
         ? 100 * stats.hits / stats.attempts
         : 0;
 
-    $("statMatches").textContent =
-        stats.matches.toLocaleString();
+    const values = {
+        statMatches: stats.matches.toLocaleString(),
+        statRate: `${rate.toFixed(1)}%`,
+        statTime: formatTime(stats.seconds),
+        statUpdates: agent.updates.toLocaleString(),
+        statExperiences: agent.experiences.toLocaleString(),
+        statEpsilon: agent.epsilon.toFixed(3)
+    };
 
-    $("statRate").textContent =
-        `${rate.toFixed(1)}%`;
+    Object.entries(values).forEach(([id, value]) => {
+        const element = $(id);
 
-    $("statTime").textContent =
-        formatTime(stats.seconds);
-
-    $("statUpdates").textContent =
-        agent.updates.toLocaleString();
-
-    $("statExperiences").textContent =
-        agent.experiences.toLocaleString();
-
-    $("statEpsilon").textContent =
-        agent.epsilon.toFixed(3);
+        if (element) {
+            element.textContent = value;
+        }
+    });
 
     drawChart();
 }
 
 function drawChart() {
     const canvas = $("statsChart");
+
+    if (!canvas) return;
+
     const ctx = canvas.getContext("2d");
+
+    if (!ctx) return;
 
     const w = canvas.width;
     const h = canvas.height;
@@ -1012,18 +1062,16 @@ function drawChart() {
         return;
     }
 
-    const points = values.map((value, i) => {
-        return {
-            x: values.length === 1
-                ? (left + right) / 2
-                : left + i * (right - left) /
-                    (values.length - 1),
+    const points = values.map((value, i) => ({
+        x: values.length === 1
+            ? (left + right) / 2
+            : left + i * (right - left) /
+                (values.length - 1),
 
-            y: bottom -
-                clamp(value.rate, 0, 100) / 100 *
-                (bottom - top)
-        };
-    });
+        y: bottom -
+            clamp(value.rate, 0, 100) / 100 *
+            (bottom - top)
+    }));
 
     ctx.strokeStyle = "#c7ff4d";
     ctx.lineWidth = 3;
@@ -1075,14 +1123,22 @@ function togglePause() {
         match.pauseStarted = null;
     }
 
-    $("pauseOverlay").classList.toggle(
-        "hidden",
-        !paused
-    );
+    const overlay = $("pauseOverlay");
 
-    $("pauseBtn").textContent = paused
-        ? "▶ RESUME"
-        : "Ⅱ PAUSE";
+    if (overlay) {
+        overlay.classList.toggle(
+            "hidden",
+            !paused
+        );
+    }
+
+    const button = $("pauseBtn");
+
+    if (button) {
+        button.textContent = paused
+            ? "▶ RESUME"
+            : "Ⅱ PAUSE";
+    }
 }
 
 
@@ -1093,11 +1149,26 @@ function togglePause() {
 async function init() {
     stats = loadStats();
 
-    $("modelStatus").textContent =
-        "AI MODEL: LOADING";
+    const status = $("modelStatus");
+
+    if (status) {
+        status.textContent = "AI MODEL: LOADING";
+    }
 
     try {
+        /*
+         * FIX 1:
+         * Force TensorFlow.js to use CPU.
+         * This avoids WebGL initialization errors.
+         */
+
+        await tf.setBackend("cpu");
         await tf.ready();
+
+        console.log(
+            "TensorFlow backend:",
+            tf.getBackend()
+        );
 
         agent = new DQN();
 
@@ -1105,18 +1176,27 @@ async function init() {
 
         envs = new ParallelWorlds(32);
 
-        $("modelStatus").textContent = restored
-            ? "AI MODEL: RESTORED"
-            : "AI MODEL: NEW";
+        if (status) {
+            status.textContent = restored
+                ? "AI MODEL: RESTORED"
+                : "AI MODEL: NEW";
+        }
 
-        $("modelStatus").nextElementSibling.style.background =
-            "#c7ff4d";
+        console.log(
+            restored
+                ? "Saved AI model restored."
+                : "New AI model initialized."
+        );
 
     } catch (error) {
-        console.error(error);
+        console.error(
+            "AI initialization failed:",
+            error
+        );
 
-        $("modelStatus").textContent =
-            "AI MODEL: ERROR";
+        if (status) {
+            status.textContent = "AI MODEL: ERROR";
+        }
 
         return;
     }
@@ -1138,12 +1218,13 @@ async function init() {
         drawStats();
     });
 
+    // BACK TO MENU
     $("statsBackBtn").addEventListener(
         "click",
         () => show("menu")
     );
 
-    // MENU
+    // END MATCH / MENU
     $("gameMenuBtn").addEventListener(
         "click",
         finishMatch
@@ -1156,7 +1237,9 @@ async function init() {
 
     // NEW MATCH
     $("newMatchBtn").addEventListener("click", () => {
-        finishMatch();
+        if (screen === "game") {
+            finishMatch();
+        }
 
         newMatch();
 
@@ -1190,9 +1273,13 @@ async function init() {
 
             localStorage.removeItem(STORAGE_KEY);
 
-            await tf.io.removeModel(
-                `localstorage://${MODEL_KEY}`
-            ).catch(() => {});
+            try {
+                await tf.io.removeModel(
+                    `localstorage://${MODEL_KEY}`
+                );
+            } catch (error) {
+                console.log("No saved model to remove.");
+            }
 
             localStorage.removeItem("pong-ai-epsilon");
             localStorage.removeItem("pong-ai-updates");
@@ -1221,7 +1308,9 @@ async function init() {
 
     // SAVE WHEN LEAVING
     window.addEventListener("beforeunload", () => {
-        if (stats) saveStats();
+        if (stats) {
+            saveStats();
+        }
 
         if (agent) {
             agent.save();
@@ -1230,5 +1319,10 @@ async function init() {
 
     show("menu");
 }
+
+
+/* ==========================================
+   START APPLICATION
+   ========================================== */
 
 init();
