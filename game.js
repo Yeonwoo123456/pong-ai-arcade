@@ -1,8 +1,8 @@
 
 /* ==========================================
    PONG AI ARCADE
-   DQN Reinforcement Learning
-   Final CPU Backend Version
+   FINAL VERSION
+   DQN + CPU + PARALLEL TRAINING + SOUND
    ========================================== */
 
 const $ = id => document.getElementById(id);
@@ -37,6 +37,135 @@ let keys = {};
 let saving = false;
 let lastSavedUpdate = 0;
 let lastStatsSave = 0;
+
+
+/* ==========================================
+   AUDIO SYSTEM - RETRO ARCADE
+   ========================================== */
+
+let audioContext = null;
+let soundEnabled = true;
+
+function initAudio() {
+    if (!audioContext) {
+        const AudioClass =
+            window.AudioContext ||
+            window.webkitAudioContext;
+
+        if (!AudioClass) {
+            console.warn("Web Audio API is unavailable.");
+            return;
+        }
+
+        audioContext = new AudioClass();
+    }
+
+    if (audioContext.state === "suspended") {
+        audioContext.resume().catch(error => {
+            console.warn("Audio resume failed:", error);
+        });
+    }
+}
+
+function playTone(
+    frequency = 500,
+    duration = 0.07,
+    type = "square",
+    volume = 0.035,
+    endFrequency = null
+) {
+    if (!soundEnabled || !audioContext) return;
+
+    if (audioContext.state !== "running") {
+        audioContext.resume().catch(() => {});
+    }
+
+    const oscillator = audioContext.createOscillator();
+    const gain = audioContext.createGain();
+
+    const now = audioContext.currentTime;
+
+    oscillator.type = type;
+
+    oscillator.frequency.setValueAtTime(
+        frequency,
+        now
+    );
+
+    if (endFrequency !== null) {
+        oscillator.frequency.exponentialRampToValueAtTime(
+            Math.max(1, endFrequency),
+            now + duration
+        );
+    }
+
+    gain.gain.setValueAtTime(volume, now);
+
+    gain.gain.exponentialRampToValueAtTime(
+        0.001,
+        now + duration
+    );
+
+    oscillator.connect(gain);
+    gain.connect(audioContext.destination);
+
+    oscillator.start(now);
+    oscillator.stop(now + duration);
+}
+
+// Button click
+function playButtonSound() {
+    playTone(850, 0.055, "square", 0.025, 620);
+}
+
+// Wall collision
+function playWallSound() {
+    playTone(280, 0.045, "square", 0.025, 190);
+}
+
+// Paddle collision
+function playPaddleSound() {
+    playTone(620, 0.075, "square", 0.04, 420);
+}
+
+// Scoring
+function playScoreSound() {
+    playTone(420, 0.09, "square", 0.035, 220);
+
+    setTimeout(() => {
+        playTone(220, 0.12, "square", 0.03, 130);
+    }, 100);
+}
+
+// Match start
+function playStartSound() {
+    playTone(440, 0.08, "square", 0.025);
+
+    setTimeout(() => {
+        playTone(660, 0.08, "square", 0.025);
+    }, 100);
+}
+
+// Match end
+function playEndSound() {
+    playTone(440, 0.12, "square", 0.03, 330);
+
+    setTimeout(() => {
+        playTone(330, 0.16, "square", 0.03, 220);
+    }, 130);
+}
+
+// Sound toggle
+function toggleSound() {
+    soundEnabled = !soundEnabled;
+
+    if (soundEnabled) {
+        initAudio();
+        playButtonSound();
+    }
+
+    return soundEnabled;
+}
 
 
 /* ==========================================
@@ -222,8 +351,7 @@ class DQN {
     }
 
     /*
-     * IMPORTANT FIX:
-     * Clone weights before setWeights.
+     * Clone temporary tensors before copying.
      * Never dispose tensors owned by the source model.
      */
 
@@ -360,7 +488,6 @@ class DQN {
 
             this.updates++;
 
-            // Update target network periodically
             if (this.updates % 180 === 0) {
                 this.copyWeights();
             }
@@ -368,9 +495,7 @@ class DQN {
     }
 
     /*
-     * FIX:
      * Prevent concurrent model saving.
-     * Do not dispose model weights during saving.
      */
 
     async save() {
@@ -550,7 +675,6 @@ class ParallelWorlds {
             this.x[i] += this.vx[i];
             this.y[i] += this.vy[i];
 
-            // Side walls
             if (
                 this.x[i] < BALL_R ||
                 this.x[i] > W - BALL_R
@@ -680,6 +804,8 @@ function newMatch() {
     setText("pauseBtn", "Ⅱ PAUSE");
 
     show("game");
+
+    playStartSound();
 }
 
 function getMatchSeconds() {
@@ -737,6 +863,8 @@ function finishMatch() {
 
     cancelAnimationFrame(raf);
 
+    playEndSound();
+
     show("menu");
 }
 
@@ -771,6 +899,7 @@ function liveState() {
 function moveLive() {
 
     // PLAYER: BOTTOM
+
     if (keys.ArrowLeft || keys.a || keys.A) {
         live.px -= 8;
     }
@@ -786,6 +915,7 @@ function moveLive() {
     );
 
     // AI: TOP
+
     const action = agent.act(
         liveState(),
         false
@@ -798,10 +928,12 @@ function moveLive() {
     );
 
     // BALL MOVEMENT
+
     live.x += live.vx;
     live.y += live.vy;
 
     // LEFT AND RIGHT WALLS
+
     if (
         live.x < BALL_R ||
         live.x > W - BALL_R
@@ -813,9 +945,12 @@ function moveLive() {
             BALL_R,
             W - BALL_R
         );
+
+        playWallSound();
     }
 
     // AI COLLISION: TOP
+
     if (
         live.vy < 0 &&
         live.y - BALL_R <= TOP + PADDLE_H
@@ -839,14 +974,19 @@ function moveLive() {
                 7
             );
 
+            playPaddleSound();
+
         } else {
             match.player++;
+
+            playScoreSound();
 
             resetLiveBall();
         }
     }
 
     // PLAYER COLLISION: BOTTOM
+
     if (
         live.vy > 0 &&
         live.y + BALL_R >= BOTTOM
@@ -866,8 +1006,12 @@ function moveLive() {
                 7
             );
 
+            playPaddleSound();
+
         } else {
             match.ai++;
+
+            playScoreSound();
 
             resetLiveBall();
         }
@@ -894,6 +1038,7 @@ function drawArena() {
     ctx.fillRect(0, 0, W, H);
 
     // BORDER
+
     ctx.strokeStyle = "#dce8dc";
     ctx.lineWidth = 2;
 
@@ -905,6 +1050,7 @@ function drawArena() {
     );
 
     // CENTER LINE
+
     ctx.setLineDash([10, 13]);
 
     ctx.strokeStyle = "#536157";
@@ -917,6 +1063,7 @@ function drawArena() {
     ctx.setLineDash([]);
 
     // AI PADDLE TOP
+
     ctx.fillStyle = "#edf4e9";
 
     ctx.fillRect(
@@ -927,6 +1074,7 @@ function drawArena() {
     );
 
     // PLAYER PADDLE BOTTOM
+
     ctx.fillRect(
         live.px - PADDLE_W / 2,
         BOTTOM - PADDLE_H,
@@ -935,6 +1083,7 @@ function drawArena() {
     );
 
     // BALL
+
     ctx.fillStyle = "#c7ff4d";
 
     ctx.fillRect(
@@ -945,6 +1094,7 @@ function drawArena() {
     );
 
     // SCORE
+
     ctx.fillStyle = "#c7ff4d";
     ctx.font = "bold 17px monospace";
 
@@ -955,6 +1105,7 @@ function drawArena() {
     );
 
     // LABELS
+
     ctx.fillStyle = "#75e6b2";
     ctx.font = "12px monospace";
 
@@ -1011,10 +1162,7 @@ async function gameLoop(now) {
 
     if (!paused) {
 
-        /*
-         * 32 parallel simulated environments.
-         * Training speed is controlled by speed.
-         */
+        // Parallel simulated training
 
         for (let k = 0; k < speed; k++) {
 
@@ -1041,7 +1189,8 @@ async function gameLoop(now) {
 
         updateGameUI();
 
-        // Save only after another 100 updates
+        // Save every 100 additional updates
+
         if (
             agent.updates >= lastSavedUpdate + 100 &&
             !saving
@@ -1049,7 +1198,8 @@ async function gameLoop(now) {
             agent.save();
         }
 
-        // Periodic statistics save
+        // Save statistics periodically
+
         if (now - lastStatsSave > 5000) {
             saveStats();
             lastStatsSave = now;
@@ -1224,6 +1374,12 @@ function togglePause() {
         "pauseBtn",
         paused ? "▶ RESUME" : "Ⅱ PAUSE"
     );
+
+    if (paused) {
+        playTone(300, 0.08, "square", 0.025);
+    } else {
+        playTone(600, 0.08, "square", 0.025);
+    }
 }
 
 
@@ -1243,12 +1399,7 @@ async function init() {
 
     try {
 
-        /*
-         * FIX 1:
-         * Force TensorFlow.js CPU backend.
-         * No WebGL required.
-         */
-
+        // CPU BACKEND
         await tf.setBackend("cpu");
         await tf.ready();
 
@@ -1293,10 +1444,27 @@ async function init() {
 
 
     /* ======================================
+       SOUND INITIALIZATION
+       ====================================== */
+
+    document.addEventListener("click", event => {
+
+        const button = event.target.closest("button");
+
+        if (button) {
+            initAudio();
+            playButtonSound();
+        }
+
+    }, true);
+
+
+    /* ======================================
        BUTTON EVENTS
        ====================================== */
 
     // PLAY
+
     bind("playBtn", "click", () => {
 
         newMatch();
@@ -1307,21 +1475,25 @@ async function init() {
     });
 
     // STATISTICS
+
     bind("statsBtn", "click", () => {
         show("stats");
         drawStats();
     });
 
     // BACK TO MENU
+
     bind("statsBackBtn", "click", () => {
         show("menu");
     });
 
     // END MATCH
+
     bind("gameMenuBtn", "click", finishMatch);
     bind("endMatchBtn", "click", finishMatch);
 
     // NEW MATCH
+
     bind("newMatchBtn", "click", () => {
 
         if (screen === "game") {
@@ -1336,9 +1508,11 @@ async function init() {
     });
 
     // PAUSE
+
     bind("pauseBtn", "click", togglePause);
 
     // TRAINING SPEED
+
     bind("speedSelect", "change", event => {
 
         const selected = Number(event.target.value);
@@ -1348,10 +1522,7 @@ async function init() {
         }
     });
 
-
-    /* ======================================
-       RESET AI AND STATISTICS
-       ====================================== */
+    // RESET DATA
 
     bind("resetStatsBtn", "click", async () => {
 
@@ -1362,8 +1533,6 @@ async function init() {
         if (!confirmed) return;
 
         cancelAnimationFrame(raf);
-
-        saveStats();
 
         try {
             await tf.io.removeModel(
@@ -1413,8 +1582,6 @@ async function init() {
 
         saveStats();
 
-        // Start an asynchronous model save.
-        // Browsers may terminate it during page exit.
         if (agent && !saving) {
             agent.save();
         }
@@ -1422,7 +1589,7 @@ async function init() {
 
 
     /* ======================================
-       START
+       START APPLICATION
        ====================================== */
 
     show("menu");
@@ -1432,7 +1599,7 @@ async function init() {
 
 
 /* ==========================================
-   START APPLICATION
+   START
    ========================================== */
 
 init();
