@@ -1,29 +1,17 @@
 
 /* =====================================================
-   PONG AI - NEURAL ARCADE
-   Black / White / Lime Green
-   ===================================================== */
-
-/* =========================
-   ROOT & RESET
-   ========================= */
+   CLASSIC PONG AI
+   Black / White / Green
+===================================================== */
 
 :root {
     --bg: #050505;
     --panel: #101010;
-    --panel-light: #171717;
-
     --white: #ffffff;
     --green: #c7ff4d;
-    --green-dark: #a6dc32;
-
     --gray: #888888;
-    --gray-light: #b5b5b5;
-
     --border: #292929;
     --danger: #ff6666;
-
-    --font: "Courier New", monospace;
 }
 
 * {
@@ -32,37 +20,38 @@
     box-sizing: border-box;
 }
 
-html {
+html,
+body {
+    width: 100%;
     min-height: 100%;
     background: var(--bg);
+    color: var(--white);
+    font-family: "Courier New", monospace;
 }
 
 body {
-    width: 100%;
     min-height: 100vh;
     overflow-x: hidden;
-
-    background: var(--bg);
-    color: var(--white);
-
-    font-family: var(--font);
 }
 
 button {
-    font-family: var(--font);
+    font-family: inherit;
     cursor: pointer;
     border-radius: 0;
-    outline: none;
 }
 
-button:focus-visible {
-    outline: 2px solid var(--green);
-    outline-offset: 4px;
-}
-
-.hidden {
+.hidden,
+#menuScreen.hidden,
+#gameScreen.hidden,
+#statsScreen.hidden,
+#pauseOverlay.hidden,
+#chartTooltip.hidden {
     display: none !important;
 }
+
+/* =====================================================
+   SCREEN LAYOUT
+===================================================== */
 
 .screen {
     width: 100%;
@@ -70,425 +59,285 @@ button:focus-visible {
     background: var(--bg);
 }
 
-
 /* =====================================================
    MAIN MENU
-   ===================================================== */
+===================================================== */
 
 #menuScreen {
     display: flex;
     justify-content: center;
     align-items: center;
-
-    min-height: 100vh;
-    padding: 40px 20px;
-
     text-align: center;
+    padding: 30px 20px;
 }
 
 .menu-container {
     width: 100%;
-    max-width: 600px;
-
+    max-width: 500px;
     display: flex;
     flex-direction: column;
     align-items: center;
 }
 
 .logo {
-    margin-bottom: 72px;
+    margin-bottom: 55px;
+}
+
+.logo-small {
+    display: block;
+    color: var(--green);
+    font-size: 12px;
+    letter-spacing: 5px;
+    margin-bottom: 18px;
 }
 
 .logo h1 {
-    color: var(--white);
-
-    font-family: Georgia, serif;
+    font-family: "Courier New", monospace;
     font-size: clamp(65px, 10vw, 95px);
     font-weight: 900;
-
-    letter-spacing: -6px;
+    letter-spacing: -7px;
     line-height: 1;
+    color: var(--white);
 }
 
 .logo h1 span {
     color: var(--green);
-    margin-left: 14px;
 }
 
 .logo p {
-    margin-top: 35px;
-
     color: var(--gray);
-    font-size: 11px;
-    letter-spacing: 5px;
-}
-
-.menu-description {
-    width: 100%;
-    margin-bottom: 30px;
-}
-
-.menu-description p {
-    color: var(--white);
-
-    font-size: clamp(14px, 2.5vw, 20px);
-    line-height: 1.6;
+    font-size: 10px;
+    letter-spacing: 3px;
+    margin-top: 20px;
 }
 
 .menu-buttons {
-    width: 100%;
-    max-width: 380px;
-
+    width: 280px;
     display: flex;
     flex-direction: column;
-    gap: 14px;
+    gap: 13px;
 }
-
-.menu-footer {
-    margin-top: 35px;
-}
-
-.menu-footer p {
-    color: var(--gray-light);
-
-    font-size: 15px;
-    letter-spacing: 1px;
-}
-
 
 /* =====================================================
-   BUTTON SYSTEM
-   ===================================================== */
+   BUTTONS
+===================================================== */
 
-.primary-btn,
+.main-btn,
 .secondary-btn,
 .danger-btn {
-    width: 100%;
-    min-height: 52px;
-
-    display: flex;
-    justify-content: center;
-    align-items: center;
-
-    padding: 14px 22px;
-
+    min-height: 50px;
+    padding: 14px 20px;
     font-size: 13px;
     font-weight: bold;
     letter-spacing: 2px;
-
-    border: 1px solid transparent;
-
-    transition:
-        background 0.18s ease,
-        color 0.18s ease,
-        border-color 0.18s ease,
-        transform 0.18s ease;
+    transition: background 0.15s, color 0.15s;
 }
 
-/* Primary */
-
-.primary-btn {
-    color: #050505;
+.main-btn {
+    color: #000;
     background: var(--green);
-    border-color: var(--green);
+    border: 1px solid var(--green);
 }
 
-.primary-btn:hover {
-    color: #000000;
+.main-btn:hover {
     background: var(--white);
     border-color: var(--white);
 }
 
-.primary-btn:active {
-    transform: scale(0.98);
-}
-
-/* Secondary */
-
 .secondary-btn {
     color: var(--white);
     background: transparent;
-    border-color: #555555;
+    border: 1px solid #555;
 }
 
 .secondary-btn:hover {
     color: var(--green);
     border-color: var(--green);
-    background: rgba(199, 255, 77, 0.04);
 }
-
-.secondary-btn:active {
-    transform: scale(0.98);
-}
-
-/* Danger */
 
 .danger-btn {
     color: var(--danger);
     background: transparent;
-    border-color: #733333;
+    border: 1px solid #733333;
 }
 
 .danger-btn:hover {
     color: var(--white);
     background: #8b2929;
-    border-color: #8b2929;
 }
 
+/* =====================================================
+   MODEL STATUS
+===================================================== */
+
+.model-information {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 10px;
+    margin-top: 35px;
+    color: var(--gray);
+    font-size: 10px;
+    letter-spacing: 1px;
+}
+
+.status-indicator {
+    width: 7px;
+    height: 7px;
+    display: inline-block;
+    background: var(--green);
+    border-radius: 50%;
+}
+
+.controls-information {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    margin-top: 55px;
+    color: #777;
+    font-size: 10px;
+    letter-spacing: 1px;
+}
+
+.controls-information p {
+    color: var(--green);
+    margin-bottom: 5px;
+    font-weight: bold;
+}
 
 /* =====================================================
    GAME SCREEN
-   ===================================================== */
+===================================================== */
 
 #gameScreen {
     display: flex;
     flex-direction: column;
     align-items: center;
-
-    min-height: 100vh;
-    padding: 25px 30px 35px;
+    justify-content: center;
+    padding: 20px;
 }
 
 .game-header {
-    width: min(100%, 1100px);
-
+    width: min(100%, 900px);
     display: flex;
-    justify-content: space-between;
     align-items: center;
+    justify-content: space-between;
+    margin-bottom: 20px;
+}
 
-    gap: 20px;
-    margin-bottom: 22px;
+.header-label {
+    display: block;
+    color: var(--green);
+    font-size: 9px;
+    letter-spacing: 2px;
+    margin-bottom: 5px;
 }
 
 .game-title h2 {
-    color: var(--white);
-    font-size: 23px;
+    font-size: 20px;
     letter-spacing: 2px;
 }
 
-.game-title h2 span {
-    color: var(--green);
-}
-
-.game-controls {
+.live-statistics {
     display: flex;
-    align-items: center;
-    justify-content: flex-end;
-
-    gap: 10px;
+    gap: 25px;
 }
 
-.game-controls button {
-    width: auto;
-    min-width: 110px;
-    min-height: 40px;
-
-    padding: 10px 15px;
-
-    font-size: 10px;
-    letter-spacing: 1px;
-}
-
-
-/* =====================================================
-   GAME CONTAINER
-   ===================================================== */
-
-.game-container {
-    width: 100%;
-    max-width: 1100px;
-
+.live-stat {
     display: flex;
     flex-direction: column;
-    align-items: center;
-}
-
-
-/* =====================================================
-   SCOREBOARD
-   ===================================================== */
-
-.scoreboard {
-    width: min(100%, 900px);
-
-    display: flex;
-    justify-content: center;
-    align-items: center;
-
-    gap: 55px;
-    padding: 15px 20px;
-    margin-bottom: 15px;
-
-    background: var(--panel);
-    border: 1px solid var(--border);
-}
-
-.score-item {
-    min-width: 110px;
-
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-
     gap: 5px;
 }
 
-.score-label {
+.live-stat span {
     color: var(--gray);
-    font-size: 10px;
-    letter-spacing: 3px;
-}
-
-.score-number {
-    font-size: 34px;
-    font-weight: bold;
-    line-height: 1.2;
-}
-
-.score-item.ai .score-number {
-    color: var(--green);
-}
-
-.score-item.player .score-number {
-    color: var(--white);
-}
-
-.score-divider {
-    width: 1px;
-    height: 45px;
-    background: var(--border);
-}
-
-
-/* =====================================================
-   ARENA
-   ===================================================== */
-
-.arena-wrapper {
-    position: relative;
-
-    width: 100%;
-    max-width: 900px;
-
-    display: flex;
-    justify-content: center;
-    align-items: center;
-
-    background: #050505;
-    border: 1px solid #333333;
-}
-
-#arena {
-    display: block;
-
-    width: 100%;
-    max-width: 900px;
-    height: auto;
-
-    aspect-ratio: 900 / 620;
-
-    background: #050505;
-}
-
-
-/* =====================================================
-   LIVE AI METRICS
-   ===================================================== */
-
-.live-metrics {
-    width: min(100%, 900px);
-
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-
-    gap: 12px;
-    margin-top: 18px;
-}
-
-.metric-card {
-    min-height: 80px;
-
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-
-    gap: 10px;
-    padding: 12px;
-
-    background: var(--panel);
-    border: 1px solid var(--border);
-
-    text-align: center;
-}
-
-.metric-label {
-    color: var(--gray);
-
     font-size: 9px;
     letter-spacing: 1px;
 }
 
-.metric-value {
+.live-stat strong {
     color: var(--green);
-
-    font-size: 17px;
-    font-weight: bold;
+    font-size: 16px;
 }
 
-
-/* =====================================================
-   PAUSE OVERLAY
-   ===================================================== */
-
-#pauseOverlay {
-    position: absolute;
-    inset: 0;
-    z-index: 100;
-
+.arena-container {
+    width: 100%;
     display: flex;
     justify-content: center;
     align-items: center;
+}
 
+#arena {
+    display: block;
+    width: min(80vw, 116.13vh);
+    max-width: 900px;
+    max-height: 80vh;
+    height: auto;
+    aspect-ratio: 900 / 620;
+    background: #050505;
+    border: 1px solid #333;
+}
+
+.game-controls {
+    display: flex;
+    justify-content: center;
+    gap: 12px;
+    margin-top: 20px;
+}
+
+.game-controls button {
+    min-width: 120px;
+    min-height: 40px;
+    padding: 10px;
+    font-size: 10px;
+}
+
+/* =====================================================
+   PAUSE OVERLAY
+===================================================== */
+
+#pauseOverlay {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    display: flex;
+    justify-content: center;
+    align-items: center;
     background: rgba(0, 0, 0, 0.88);
 }
 
-.pause-content {
+.overlay-content {
     width: min(90%, 350px);
-
     display: flex;
     flex-direction: column;
-
     gap: 13px;
     padding: 35px;
-
-    background: var(--panel);
-    border: 1px solid #444444;
-
     text-align: center;
+    background: #101010;
+    border: 1px solid #444;
 }
 
-.pause-content h2 {
+.overlay-content h2 {
     color: var(--green);
-
-    font-size: 26px;
-    letter-spacing: 2px;
-
-    margin-bottom: 12px;
+    font-size: 28px;
+    margin-bottom: 5px;
 }
 
+.overlay-content p {
+    color: var(--gray);
+    font-size: 10px;
+    margin-bottom: 15px;
+}
 
 /* =====================================================
-   STATISTICS SCREEN
-   ===================================================== */
+   STATISTICS
+===================================================== */
 
 #statsScreen {
     display: flex;
     justify-content: center;
     align-items: flex-start;
-
-    min-height: 100vh;
-    padding: 45px 25px;
+    padding: 45px 20px;
 }
 
 .stats-container {
@@ -500,302 +349,182 @@ button:focus-visible {
     display: flex;
     justify-content: space-between;
     align-items: center;
-
-    gap: 20px;
     margin-bottom: 30px;
 }
 
 .stats-header h1 {
-    color: var(--white);
-
-    font-size: 27px;
+    font-size: 28px;
     letter-spacing: 2px;
 }
 
 .stats-header button {
-    width: auto;
-    min-width: 110px;
+    min-width: 100px;
 }
-
-
-/* =====================================================
-   STATISTICS CARDS
-   ===================================================== */
 
 .stats-grid {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-
-    gap: 13px;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
     margin-bottom: 30px;
 }
 
 .stat-card {
-    min-height: 110px;
-
+    min-height: 105px;
+    padding: 20px;
     display: flex;
     flex-direction: column;
     justify-content: center;
-
-    gap: 13px;
-    padding: 20px;
-
+    gap: 12px;
     background: var(--panel);
     border: 1px solid var(--border);
 }
 
-.stat-label {
+.stat-card span {
     color: var(--gray);
-
-    font-size: 10px;
+    font-size: 9px;
     letter-spacing: 1px;
 }
 
-.stat-value {
+.stat-card strong {
     color: var(--green);
-
-    font-size: 27px;
-    font-weight: bold;
+    font-size: 25px;
 }
-
 
 /* =====================================================
    CHART
-   ===================================================== */
+===================================================== */
 
 .chart-container {
     position: relative;
-
-    width: 100%;
-    padding: 25px;
+    padding: 22px;
     margin-bottom: 20px;
-
     background: var(--panel);
     border: 1px solid var(--border);
 }
 
-.chart-container h2 {
-    color: var(--white);
-
-    font-size: 13px;
-    letter-spacing: 2px;
-
+.chart-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
     margin-bottom: 20px;
+}
+
+.chart-header h2 {
+    font-size: 12px;
+    letter-spacing: 2px;
+}
+
+.chart-legend {
+    display: flex;
+    gap: 15px;
+    font-size: 10px;
+}
+
+.player-legend {
+    color: var(--white);
+}
+
+.ai-legend {
+    color: var(--green);
 }
 
 #statsChart {
     display: block;
-
     width: 100%;
     height: auto;
-
-    min-height: 180px;
-
     background: #080808;
+    cursor: default;
 }
-
 
 /* =====================================================
    CHART TOOLTIP
-   ===================================================== */
+===================================================== */
 
-#chartTooltip {
+.chart-tooltip {
     position: absolute;
     z-index: 20;
-
-    display: none;
-
     min-width: 175px;
     max-width: 230px;
-
     padding: 12px 15px;
-
     background: #151515;
     border: 1px solid var(--green);
-
     color: var(--white);
-
-    font-size: 11px;
+    font-family: "Courier New", monospace;
+    font-size: 12px;
     line-height: 1.8;
-
     pointer-events: none;
     box-shadow: 0 4px 15px rgba(0, 0, 0, 0.6);
 }
 
-.chart-tooltip {
-    font-family: var(--font);
+.chart-tooltip .tooltip-title {
+    color: var(--green);
+    font-weight: bold;
+    margin-bottom: 5px;
 }
 
+.chart-tooltip .tooltip-player {
+    color: var(--white);
+}
 
-/* =====================================================
-   STATISTICS CONTROLS
-   ===================================================== */
+.chart-tooltip .tooltip-ai {
+    color: var(--green);
+}
 
-.stats-controls {
+#resetStatsBtn {
     width: 100%;
-    display: flex;
-    justify-content: flex-end;
 }
-
-.stats-controls button {
-    width: auto;
-    min-width: 220px;
-}
-
 
 /* =====================================================
-   RESPONSIVE - TABLET
-   ===================================================== */
-
-@media (max-width: 900px) {
-
-    #gameScreen {
-        padding: 20px;
-    }
-
-    .game-header {
-        flex-wrap: wrap;
-    }
-
-    .game-controls {
-        gap: 7px;
-    }
-
-    .game-controls button {
-        min-width: 90px;
-        font-size: 9px;
-    }
-
-    .scoreboard {
-        gap: 35px;
-    }
-
-    .live-metrics {
-        gap: 8px;
-    }
-
-    .metric-value {
-        font-size: 14px;
-    }
-}
-
-
-/* =====================================================
-   RESPONSIVE - MOBILE
-   ===================================================== */
+   RESPONSIVE
+===================================================== */
 
 @media (max-width: 700px) {
-
     #menuScreen {
-        padding: 25px 20px;
-    }
-
-    .logo {
-        margin-bottom: 55px;
+        padding: 20px;
     }
 
     .logo h1 {
         font-size: 65px;
-        letter-spacing: -5px;
-    }
-
-    .logo p {
-        margin-top: 25px;
-        font-size: 9px;
-        letter-spacing: 4px;
-    }
-
-    .menu-description {
-        margin-bottom: 25px;
-    }
-
-    .menu-buttons {
-        max-width: 100%;
-    }
-
-    .menu-footer p {
-        font-size: 12px;
-    }
-
-
-    /* Game header */
-
-    #gameScreen {
-        padding: 15px 12px 25px;
     }
 
     .game-header {
         flex-direction: column;
         align-items: flex-start;
-
         gap: 15px;
-        margin-bottom: 15px;
+    }
+
+    .live-statistics {
+        width: 100%;
+        justify-content: space-between;
+        gap: 8px;
+    }
+
+    .live-stat span {
+        font-size: 8px;
+    }
+
+    #arena {
+        width: 100%;
+        max-height: none;
     }
 
     .game-controls {
         width: 100%;
-        justify-content: space-between;
         flex-wrap: wrap;
     }
 
     .game-controls button {
         flex: 1;
-        min-width: 85px;
-        padding: 9px 5px;
+        min-width: 90px;
         font-size: 8px;
     }
 
-
-    /* Scoreboard */
-
-    .scoreboard {
-        gap: 25px;
-        padding: 12px;
-    }
-
-    .score-item {
-        min-width: 80px;
-    }
-
-    .score-number {
-        font-size: 28px;
-    }
-
-
-    /* Metrics */
-
-    .live-metrics {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 8px;
-    }
-
-    .metric-card {
-        min-height: 72px;
-        padding: 10px 5px;
-    }
-
-    .metric-label {
-        font-size: 8px;
-    }
-
-    .metric-value {
-        font-size: 13px;
-    }
-
-
-    /* Statistics */
-
-    #statsScreen {
-        padding: 25px 15px;
+    .stats-grid {
+        grid-template-columns: repeat(2, 1fr);
     }
 
     .stats-header h1 {
         font-size: 21px;
-    }
-
-    .stats-grid {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 9px;
     }
 
     .stat-card {
@@ -803,76 +532,523 @@ button:focus-visible {
         padding: 13px;
     }
 
-    .stat-label {
-        font-size: 8px;
-    }
-
-    .stat-value {
-        font-size: 21px;
+    .stat-card strong {
+        font-size: 20px;
     }
 
     .chart-container {
-        padding: 15px;
+        padding: 12px;
     }
 
-    .chart-container h2 {
-        font-size: 11px;
-    }
-
-    .stats-controls button {
-        width: 100%;
+    .chart-tooltip {
+        font-size: 10px;
+        min-width: 150px;
     }
 }
 
-
-/* =====================================================
-   RESPONSIVE - SMALL MOBILE
-   ===================================================== */
-
 @media (max-width: 400px) {
-
-    .logo h1 {
-        font-size: 56px;
+    .stats-grid {
+        grid-template-columns: 1fr;
     }
 
-    .menu-description p {
+    .menu-buttons {
+        width: 100%;
+        max-width: 280px;
+    }
+}
+
+/* =====================================================
+   HTML COMPATIBILITY + LAYOUT FIXES
+===================================================== */
+
+/* Button names used by index.html */
+
+.primary-btn,
+.main-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 50px;
+    padding: 14px 20px;
+    color: #050505;
+    background: var(--green);
+    border: 1px solid var(--green);
+    border-radius: 0;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-decoration: none;
+    transition: background .15s, color .15s, border-color .15s;
+}
+
+.primary-btn:hover,
+.main-btn:hover {
+    color: #050505;
+    background: #fff;
+    border-color: #fff;
+}
+
+.secondary-btn,
+.danger-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 50px;
+    padding: 14px 20px;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    border-radius: 0;
+}
+
+button:focus-visible {
+    outline: 2px solid var(--green);
+    outline-offset: 4px;
+}
+
+.menu-description {
+    width: 100%;
+    margin: 0 0 26px;
+    color: var(--white);
+    font-size: clamp(14px, 2.2vw, 20px);
+    line-height: 1.5;
+    text-align: center;
+}
+
+.menu-buttons {
+    width: min(100%, 380px);
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.menu-buttons button {
+    width: 100%;
+    min-height: 56px;
+}
+
+.menu-footer {
+    margin-top: 28px;
+    color: var(--gray);
+    font-size: 11px;
+    letter-spacing: 3px;
+    text-align: center;
+}
+
+/* Game layout */
+
+#gameScreen {
+    min-height: 100vh;
+    gap: 0;
+}
+
+.game-header {
+    flex-wrap: wrap;
+    gap: 14px;
+}
+
+.game-controls {
+    margin-top: 0;
+}
+
+.game-controls button {
+    min-width: 105px;
+    min-height: 42px;
+}
+
+.game-container {
+    width: min(100%, 900px);
+    margin: 0 auto;
+}
+
+.arena-wrapper {
+    position: relative;
+    width: 100%;
+}
+
+#arena {
+    width: 100%;
+    max-width: 900px;
+    max-height: none;
+    height: auto;
+    aspect-ratio: 900 / 620;
+}
+
+.scoreboard {
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: clamp(35px, 10vw, 100px);
+    padding: 12px 16px;
+    margin-bottom: 12px;
+    background: #101010;
+    border: 1px solid #292929;
+}
+
+.score-item {
+    min-width: 90px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+}
+
+.score-label {
+    color: var(--gray);
+    font-size: 10px;
+    letter-spacing: 2px;
+}
+
+.score-number {
+    color: var(--white);
+    font-size: 30px;
+    line-height: 1;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+
+.score-item.ai .score-number {
+    color: var(--green);
+}
+
+.score-divider {
+    width: 1px;
+    height: 42px;
+    background: #444;
+}
+
+.live-metrics {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
+    margin-top: 14px;
+}
+
+.metric-card {
+    min-width: 0;
+    min-height: 75px;
+    padding: 13px 10px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 9px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+}
+
+.metric-label {
+    color: var(--gray);
+    font-size: 9px;
+    letter-spacing: 1px;
+}
+
+.metric-value {
+    color: var(--green);
+    font-size: 17px;
+    font-weight: 700;
+    overflow-wrap: anywhere;
+}
+
+/* Pause overlay */
+
+#pauseOverlay {
+    position: absolute;
+    inset: 0;
+    padding: 18px;
+}
+
+.pause-content {
+    width: min(100%, 340px);
+    display: flex;
+    flex-direction: column;
+    gap: 13px;
+    padding: 30px;
+    text-align: center;
+    background: #101010;
+    border: 1px solid #444;
+}
+
+.pause-content h2 {
+    color: var(--green);
+    font-size: 24px;
+    letter-spacing: 2px;
+    margin-bottom: 8px;
+}
+
+.pause-content button {
+    width: 100%;
+}
+
+/* Statistics */
+
+#statsScreen {
+    min-height: 100vh;
+}
+
+.stats-container {
+    width: 100%;
+    max-width: 950px;
+    margin: 0 auto;
+}
+
+.stat-card .stat-label {
+    color: var(--gray);
+    font-size: 9px;
+    letter-spacing: 1px;
+}
+
+.stat-card .stat-value {
+    color: var(--green);
+    font-size: 25px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+
+.chart-container h2 {
+    margin-bottom: 18px;
+    font-size: 12px;
+    letter-spacing: 2px;
+}
+
+#statsChart {
+    width: 100%;
+    height: 300px;
+}
+
+#chartTooltip {
+    display: none;
+    position: absolute;
+    z-index: 20;
+    min-width: 175px;
+    max-width: 230px;
+    padding: 10px 13px;
+    color: var(--white);
+    background: #151515;
+    border: 1px solid var(--green);
+    font-size: 11px;
+    line-height: 1.7;
+    pointer-events: none;
+}
+
+.stats-controls {
+    width: 100%;
+    margin-top: 18px;
+}
+
+@media (max-width: 700px) {
+    .live-metrics {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .game-controls {
+        width: 100%;
+        flex-wrap: wrap;
+    }
+
+    .game-controls button {
+        flex: 1 1 100px;
+    }
+
+    .score-number {
+        font-size: 25px;
+    }
+
+    .stats-container {
+        max-width: 100%;
+    }
+}
+
+@media (max-width: 420px) {
+    .menu-description {
         font-size: 14px;
     }
 
     .scoreboard {
-        gap: 15px;
+        gap: 22px;
     }
 
     .score-item {
         min-width: 70px;
     }
 
-    .stats-grid {
-        grid-template-columns: 1fr;
-    }
-
-    .stats-header h1 {
-        font-size: 18px;
-    }
-
-    .game-controls button {
-        min-width: 75px;
-        font-size: 7px;
+    .metric-value {
+        font-size: 15px;
     }
 }
 
-
 /* =====================================================
-   ACCESSIBILITY & MOTION
-   ===================================================== */
+   COMPACT FULL-VIEWPORT GAME LAYOUT
+   Keep header, scoreboard, arena, metrics and controls visible.
+===================================================== */
 
-@media (prefers-reduced-motion: reduce) {
+#gameScreen {
+    width: 100%;
+    height: 100vh;
+    min-height: 0;
+    overflow: hidden;
+    padding: 8px 16px 10px;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    align-items: center;
+    gap: 8px;
+}
 
-    *,
-    *::before,
-    *::after {
-        scroll-behavior: auto !important;
-        transition-duration: 0.01ms !important;
-        animation-duration: 0.01ms !important;
+#gameScreen .game-header {
+    width: min(100%, 900px);
+    flex: 0 0 auto;
+    min-height: 38px;
+    margin: 0;
+    gap: 10px;
+}
+
+#gameScreen .game-title h2 {
+    font-size: 17px;
+}
+
+#gameScreen .game-controls {
+    display: flex;
+    flex-wrap: nowrap;
+    justify-content: flex-end;
+    gap: 7px;
+    margin: 0;
+}
+
+#gameScreen .game-controls button {
+    min-width: 82px;
+    min-height: 32px;
+    padding: 6px 9px;
+    font-size: 9px;
+}
+
+#gameScreen .game-container {
+    width: min(100%, 900px);
+    max-width: 900px;
+    min-height: 0;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 7px;
+}
+
+#gameScreen .scoreboard {
+    flex: 0 0 auto;
+    width: min(100%, 900px);
+    min-height: 48px;
+    padding: 5px 12px;
+    margin: 0;
+    gap: clamp(24px, 6vw, 70px);
+}
+
+#gameScreen .score-item {
+    min-width: 65px;
+    gap: 2px;
+}
+
+#gameScreen .score-label {
+    font-size: 8px;
+}
+
+#gameScreen .score-number {
+    font-size: 23px;
+}
+
+#gameScreen .score-divider {
+    height: 30px;
+}
+
+#gameScreen .arena-wrapper {
+    width: auto;
+    max-width: 100%;
+    flex: 0 1 auto;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 0;
+}
+
+#gameScreen #arena {
+    display: block;
+    width: auto;
+    height: min(66vh, 620px);
+    max-width: min(92vw, 900px);
+    max-height: calc(100vh - 205px);
+    aspect-ratio: 900 / 620;
+    object-fit: contain;
+}
+
+#gameScreen .live-metrics {
+    flex: 0 0 auto;
+    width: min(100%, 900px);
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 7px;
+    margin: 0;
+}
+
+#gameScreen .metric-card {
+    min-height: 48px;
+    padding: 6px 8px;
+    gap: 4px;
+}
+
+#gameScreen .metric-label {
+    font-size: 8px;
+}
+
+#gameScreen .metric-value {
+    font-size: 13px;
+}
+
+@media (max-height: 760px) {
+    #gameScreen #arena {
+        height: min(61vh, 500px);
+        max-height: calc(100vh - 190px);
+    }
+
+    #gameScreen {
+        gap: 5px;
+        padding-top: 5px;
+        padding-bottom: 5px;
+    }
+
+    #gameScreen .scoreboard {
+        min-height: 42px;
+    }
+
+    #gameScreen .metric-card {
+        min-height: 42px;
+    }
+}
+
+@media (max-width: 700px) {
+    #gameScreen {
+        padding-left: 8px;
+        padding-right: 8px;
+    }
+
+    #gameScreen .game-header {
+        align-items: center;
+    }
+
+    #gameScreen .game-controls button {
+        min-width: 0;
+        flex: 0 1 auto;
+        padding: 6px 7px;
+        font-size: 8px;
+    }
+
+    #gameScreen #arena {
+        width: min(92vw, calc((100vh - 205px) * 900 / 620));
+        height: auto;
+        max-height: calc(100vh - 205px);
+    }
+
+    #gameScreen .live-metrics {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 }
