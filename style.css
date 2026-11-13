@@ -561,8 +561,6 @@ button {
    HTML COMPATIBILITY + LAYOUT FIXES
 ===================================================== */
 
-/* Button names used by index.html */
-
 .primary-btn,
 .main-btn {
     display: inline-flex;
@@ -640,8 +638,11 @@ button:focus-visible {
 /* Game layout */
 
 #gameScreen {
-    min-height: 100vh;
-    gap: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
 }
 
 .game-header {
@@ -783,7 +784,7 @@ button:focus-visible {
     width: 100%;
 }
 
-/* Statistics */
+/* Statistics layout */
 
 #statsScreen {
     min-height: 100vh;
@@ -882,7 +883,6 @@ button:focus-visible {
 
 /* =====================================================
    COMPACT FULL-VIEWPORT GAME LAYOUT
-   Keep header, scoreboard, arena, metrics and controls visible.
 ===================================================== */
 
 #gameScreen {
@@ -1050,5 +1050,57 @@ button:focus-visible {
 
     #gameScreen .live-metrics {
         grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+/* =====================================================
+   FINAL PATCH: LARGER ARENA + RELIABLE STATISTICS CHART
+===================================================== */
+
+#gameScreen #arena {
+    height: min(70vh, 660px);
+    max-height: calc(100vh - 185px);
+}
+
+@media (max-height: 760px) {
+    #gameScreen #arena {
+        height: min(65vh, 540px);
+        max-height: calc(100vh - 175px);
+    }
+}
+
+.chart-container {
+    width: 100%;
+    min-width: 0;
+    overflow: hidden;
+}
+
+#statsChart {
+    display: block;
+    width: 100%;
+    height: auto;
+    aspect-ratio: 1000 / 360;
+    min-height: 180px;
+    background: #080808;
+}
+
+.stats-reset-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    width: 100%;
+}
+
+.stats-reset-actions button {
+    flex: 1 1 220px;
+}
+
+@media (max-width: 520px) {
+    .stats-reset-actions {
+        flex-direction: column;
+    }
+
+    .stats-reset-actions button {
+        width: 100%;
     }
 }
