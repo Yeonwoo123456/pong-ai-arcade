@@ -3,9 +3,10 @@
 
 /* =========================================================
    PONG AI - FINAL STABLE VERSION
-   Equal player/AI paddle dimensions and speed.
-   AI tracking starts at 30%.
-   TensorFlow.js is optional.
+   Initial prediction error: 100% (large offset)
+   AI tracking: heavily reduced
+   Growth: Every completed point
+   TensorFlow.js: Optional
    ========================================================= */
 
 const CONFIG = {
@@ -13,12 +14,14 @@ const CONFIG = {
     height: 620,
 
     ballRadius: 9,
-    ballSpeed: 5,
+    ballSpeed: 6.5, // 30% faster than the previous 5 px/frame
 
     playerSpeed: 8,
     playerWidth: 125,
     paddleHeight: 13,
 
+    // Player and AI have identical physical paddle properties.
+    // Only AI prediction quality and reaction timing improve with progression.
     initialErrorRate: 0.90,
     finalErrorRate: 0.12,
 
@@ -28,6 +31,7 @@ const CONFIG = {
     initialReactionFrames: 18,
     finalReactionFrames: 5,
 
+    // AI tracking responsiveness: 30% initially, gradually reaches 100%.
     initialTrackingFactor: 0.30,
     finalTrackingFactor: 1.00,
 
@@ -79,13 +83,13 @@ const ui = {
     pauseOverlay: $("pauseOverlay"),
 
     resetStats: $("resetStatsBtn"),
+    resetAIProgress: $("resetAIProgressBtn"),
 
     modelStatus: $("modelStatus"),
 
     liveRate: $("liveRate"),
     liveUpdates: $("liveUpdates"),
     liveSpeed: $("liveSpeed"),
-
     aiScoreDisplay: $("aiScoreDisplay"),
     playerScoreDisplay: $("playerScoreDisplay"),
 
@@ -300,10 +304,12 @@ function updateAISkill() {
 }
 
 function getAISpeed() {
+    // Exactly the same maximum movement speed as the player.
     return CONFIG.playerSpeed;
 }
 
 function getAIWidth() {
+    // Exactly the same paddle width as the player.
     return CONFIG.playerWidth;
 }
 
@@ -321,20 +327,6 @@ function getAIErrorRange() {
 
 function getAIPredictionAccuracy() {
     return 1 - getAIErrorRate();
-}
-
-function getAITrackingFactor() {
-    return CONFIG.initialTrackingFactor +
-        (CONFIG.finalTrackingFactor -
-            CONFIG.initialTrackingFactor) * aiSkill;
-}
-
-function getAIReactionFrames() {
-    return Math.round(
-        CONFIG.initialReactionFrames +
-        (CONFIG.finalReactionFrames -
-            CONFIG.initialReactionFrames) * aiSkill
-    );
 }
 
 function advanceAISkill() {
@@ -398,7 +390,6 @@ class ReplayMemory {
 class DQNAgent {
     constructor(tf) {
         this.tf = tf;
-
         this.memory = new ReplayMemory(
             CONFIG.replayCapacity
         );
@@ -656,6 +647,8 @@ function getState() {
 }
 
 function predictBallXAtY(targetY) {
+    // AI is at the top.
+    // Negative vy means the ball is approaching AI.
     if (ball.vy >= 0) return ball.x;
 
     const time = (targetY - ball.y) / ball.vy;
@@ -686,49 +679,46 @@ function predictBallXAtY(targetY) {
    ========================================================= */
 
 function moveAI() {
+    // Match the player's paddle dimensions exactly.
     ai.width = CONFIG.playerWidth;
 
+    // The AI updates its estimate less frequently at low levels.
     moveAI.frame = (moveAI.frame || 0) + 1;
-
-    const reactionFrames = getAIReactionFrames();
+    const reactionFrames = Math.round(
+        CONFIG.initialReactionFrames +
+        (CONFIG.finalReactionFrames - CONFIG.initialReactionFrames) *
+        aiSkill
+    );
 
     if (
         moveAI.frame % reactionFrames === 0 ||
         moveAI.cachedTargetX === undefined
     ) {
         if (ball.vy < 0) {
+            // Start with a mathematically predicted landing point, then
+            // deliberately corrupt the estimate according to AI skill.
             const truePrediction = predictBallXAtY(ai.y);
-
-            const predictionFails =
-                Math.random() < getAIErrorRate();
+            const predictionFails = Math.random() < getAIErrorRate();
 
             if (predictionFails) {
-                const error =
-                    (Math.random() * 2 - 1) *
+                const error = (Math.random() * 2 - 1) *
                     getAIErrorRange();
-
-                moveAI.cachedTargetX =
-                    truePrediction + error;
+                moveAI.cachedTargetX = truePrediction + error;
             } else {
                 moveAI.cachedTargetX = truePrediction;
             }
 
+            // Keep DQN influence small so it cannot bypass the prediction
+            // difficulty settings.
             if (agent && agent.ready) {
                 const state = getState();
                 const action = agent.chooseAction(state);
-
                 lastAIState = [...state];
                 lastAIAction = action;
 
-                const influence = Math.min(
-                    0.03,
-                    agent.updates / 5000
-                );
-
+                const influence = Math.min(0.03, agent.updates / 5000);
                 moveAI.cachedTargetX +=
-                    (action - 1) *
-                    CONFIG.playerSpeed *
-                    influence;
+                    (action - 1) * CONFIG.playerSpeed * influence;
             }
         } else {
             moveAI.cachedTargetX = CONFIG.width / 2;
@@ -737,7 +727,6 @@ function moveAI() {
 
     const minX = ai.width / 2;
     const maxX = CONFIG.width - ai.width / 2;
-
     const targetX = Math.max(
         minX,
         Math.min(maxX, moveAI.cachedTargetX)
@@ -745,8 +734,14 @@ function moveAI() {
 
     const difference = targetX - ai.x;
 
-    const trackingFactor = getAITrackingFactor();
+    // Tracking responsiveness starts at 30% and improves with AI skill.
+    // Paddle width and the player's physical speed setting remain identical.
+    const trackingFactor =
+        CONFIG.initialTrackingFactor +
+        (CONFIG.finalTrackingFactor - CONFIG.initialTrackingFactor) * aiSkill;
 
+    // The AI gradually closes the distance instead of snapping to its target.
+    // This limits its initial tracking response without changing paddle size.
     const movement = Math.max(
         -CONFIG.playerSpeed * trackingFactor,
         Math.min(
@@ -761,10 +756,7 @@ function moveAI() {
 
     ai.x = Math.max(
         ai.width / 2,
-        Math.min(
-            CONFIG.width - ai.width / 2,
-            ai.x
-        )
+        Math.min(CONFIG.width - ai.width / 2, ai.x)
     );
 }
 
@@ -798,28 +790,24 @@ function resetBall() {
 
     ball.vx =
         (Math.random() < 0.5 ? -1 : 1) *
-        (2 + Math.random() * 2);
+        (2 + Math.random() * 2) * 1.3;
 
     ball.vy =
         (Math.random() < 0.5 ? -1 : 1) *
         CONFIG.ballSpeed;
 
+    // One prediction decision per serve.
     servePredictionFails =
         Math.random() < getAIErrorRate();
 
-    const errorDirection =
-        Math.random() < 0.5 ? -1 : 1;
-
+    const errorDirection = Math.random() < 0.5 ? -1 : 1;
     const errorMagnitude =
-        getAIErrorRange() *
-        (0.65 + Math.random() * 0.35);
+        getAIErrorRange() * (0.65 + Math.random() * 0.35);
 
-    servePredictionOffset =
-        errorDirection * errorMagnitude;
+    servePredictionOffset = errorDirection * errorMagnitude;
 
     lastAIState = null;
     lastAIAction = 1;
-
     moveAI.cachedTargetX = CONFIG.width / 2;
 }
 
@@ -849,7 +837,7 @@ function bounceFromPaddle(paddle, isAI) {
         )
     );
 
-    ball.vx = relative * 5;
+    ball.vx = relative * 6.5;
 
     ball.vy = isAI
         ? Math.abs(ball.vy)
@@ -888,8 +876,10 @@ function finishPoint(playerWon) {
         playSound(800, 0.15);
     }
 
+    // Every completed point improves AI progression.
     advanceAISkill();
 
+    // DQN learning is optional.
     if (agent && agent.ready) {
         agent.trainAfterPoint();
     }
@@ -929,6 +919,7 @@ function moveGame() {
     ball.x += ball.vx;
     ball.y += ball.vy;
 
+    // Side walls.
     if (
         ball.x - ball.radius <= 0 ||
         ball.x + ball.radius >= CONFIG.width
@@ -937,6 +928,7 @@ function moveGame() {
         playSound(350);
     }
 
+    // AI paddle at the top.
     if (ball.vy < 0 && ballHitsPaddle(ai)) {
         ball.y =
             ai.y + ai.height / 2 + ball.radius;
@@ -944,6 +936,7 @@ function moveGame() {
         bounceFromPaddle(ai, true);
     }
 
+    // Player paddle at the bottom.
     if (ball.vy > 0 && ballHitsPaddle(player)) {
         ball.y =
             player.y - player.height / 2 -
@@ -963,7 +956,6 @@ function moveGame() {
     if (ui.aiScoreDisplay) {
         ui.aiScoreDisplay.textContent = String(aiScore);
     }
-
     if (ui.playerScoreDisplay) {
         ui.playerScoreDisplay.textContent = String(playerScore);
     }
@@ -1020,6 +1012,7 @@ function drawGame() {
         Math.PI * 2
     );
     ctx.fill();
+
 }
 
 /* =========================================================
@@ -1076,13 +1069,8 @@ function startMatch() {
     playerScore = 0;
     aiScore = 0;
 
-    if (ui.aiScoreDisplay) {
-        ui.aiScoreDisplay.textContent = "0";
-    }
-
-    if (ui.playerScoreDisplay) {
-        ui.playerScoreDisplay.textContent = "0";
-    }
+    if (ui.aiScoreDisplay) ui.aiScoreDisplay.textContent = "0";
+    if (ui.playerScoreDisplay) ui.playerScoreDisplay.textContent = "0";
 
     player.x = CONFIG.width / 2;
     ai.x = CONFIG.width / 2;
@@ -1217,11 +1205,13 @@ function updateUI() {
     }
 
     if (ui.statMatches) {
-        ui.statMatches.textContent = statistics.matches;
+        ui.statMatches.textContent =
+            statistics.matches;
     }
 
     if (ui.statRate) {
-        ui.statRate.textContent = `${getWinRate()}%`;
+        ui.statRate.textContent =
+            `${getWinRate()}%`;
     }
 
     if (ui.statTime) {
@@ -1251,87 +1241,148 @@ function updateUI() {
 
 function drawChart() {
     const chart = ui.chart;
-
     if (!chart) return;
 
     const chartCtx = chart.getContext("2d");
     if (!chartCtx) return;
 
-    const width = chart.width;
-    const height = chart.height;
+    // Use a stable internal drawing size. CSS scales it responsively.
+    const width = 1000;
+    const height = 360;
+    if (chart.width !== width) chart.width = width;
+    if (chart.height !== height) chart.height = height;
 
     chartCtx.clearRect(0, 0, width, height);
-
     chartCtx.fillStyle = "#080808";
     chartCtx.fillRect(0, 0, width, height);
 
-    const history = statistics.history;
+    const history = Array.isArray(statistics.history)
+        ? statistics.history.filter(item =>
+            Number.isFinite(Number(item.playerScore)) &&
+            Number.isFinite(Number(item.aiScore))
+        )
+        : [];
 
-    if (!history.length) {
-        chartCtx.fillStyle = "#888";
-        chartCtx.font = "14px monospace";
+    const padding = { left: 66, right: 28, top: 28, bottom: 58 };
+    const graphWidth = width - padding.left - padding.right;
+    const graphHeight = height - padding.top - padding.bottom;
+
+    chartCtx.font = "13px Courier New, monospace";
+    chartCtx.textBaseline = "middle";
+    chartCtx.textAlign = "right";
+    chartCtx.strokeStyle = "#303030";
+    chartCtx.lineWidth = 1;
+
+    if (history.length === 0) {
+        for (let i = 0; i <= 4; i++) {
+            const y = padding.top + graphHeight * i / 4;
+            chartCtx.beginPath();
+            chartCtx.moveTo(padding.left, y);
+            chartCtx.lineTo(width - padding.right, y);
+            chartCtx.stroke();
+        }
+        chartCtx.fillStyle = "#999999";
         chartCtx.textAlign = "center";
-
-        chartCtx.fillText(
-            "NO MATCH DATA",
-            width / 2,
-            height / 2
-        );
-
+        chartCtx.font = "bold 16px Courier New, monospace";
+        chartCtx.fillText("NO COMPLETED MATCHES YET", width / 2, height / 2);
+        chartCtx.font = "12px Courier New, monospace";
+        chartCtx.fillText("Finish a match to display score history", width / 2, height / 2 + 28);
         return;
     }
 
-    const padding = 35;
-    const graphWidth = width - padding * 2;
-    const graphHeight = height - padding * 2;
-
     const maxScore = Math.max(
-        1,
-        ...history.map(item =>
-            Math.max(item.playerScore, item.aiScore)
-        )
+        5,
+        ...history.map(item => Math.max(
+            Number(item.playerScore),
+            Number(item.aiScore)
+        ))
     );
+    const yMax = Math.ceil(maxScore / 5) * 5 || 5;
 
-    chartCtx.strokeStyle = "#444";
-
-    for (let i = 0; i <= 4; i++) {
-        const y = padding + graphHeight * i / 4;
-
+    // Grid and Y-axis labels.
+    for (let i = 0; i <= 5; i++) {
+        const value = yMax - (yMax * i / 5);
+        const y = padding.top + graphHeight * i / 5;
         chartCtx.beginPath();
-        chartCtx.moveTo(padding, y);
-        chartCtx.lineTo(width - padding, y);
+        chartCtx.moveTo(padding.left, y);
+        chartCtx.lineTo(width - padding.right, y);
         chartCtx.stroke();
+        chartCtx.fillStyle = "#999999";
+        chartCtx.fillText(String(Math.round(value)), padding.left - 12, y);
     }
 
-    function drawLine(key, color) {
-        chartCtx.beginPath();
+    // Axes.
+    chartCtx.strokeStyle = "#777777";
+    chartCtx.beginPath();
+    chartCtx.moveTo(padding.left, padding.top);
+    chartCtx.lineTo(padding.left, height - padding.bottom);
+    chartCtx.lineTo(width - padding.right, height - padding.bottom);
+    chartCtx.stroke();
+
+    const xFor = index => history.length === 1
+        ? padding.left + graphWidth / 2
+        : padding.left + graphWidth * index / (history.length - 1);
+
+    const yFor = value =>
+        padding.top + graphHeight -
+        (Number(value) / yMax) * graphHeight;
+
+    function drawSeries(key, color) {
+        chartCtx.save();
         chartCtx.strokeStyle = color;
-        chartCtx.lineWidth = 2;
+        chartCtx.fillStyle = color;
+        chartCtx.lineWidth = 3;
+        chartCtx.lineJoin = "round";
+        chartCtx.lineCap = "round";
+        chartCtx.beginPath();
 
         history.forEach((item, index) => {
-            const x = padding +
-                (
-                    history.length === 1
-                        ? graphWidth / 2
-                        : graphWidth * index /
-                            (history.length - 1)
-                );
-
-            const y = height - padding -
-                item[key] / maxScore * graphHeight;
-
-            if (index === 0) {
-                chartCtx.moveTo(x, y);
-            } else {
-                chartCtx.lineTo(x, y);
-            }
+            const x = xFor(index);
+            const y = yFor(item[key]);
+            if (index === 0) chartCtx.moveTo(x, y);
+            else chartCtx.lineTo(x, y);
         });
 
         chartCtx.stroke();
+
+        history.forEach((item, index) => {
+            chartCtx.beginPath();
+            chartCtx.arc(xFor(index), yFor(item[key]), 4, 0, Math.PI * 2);
+            chartCtx.fill();
+        });
+        chartCtx.restore();
     }
 
-    drawLine("playerScore", "#ffffff");
-    drawLine("aiScore", "#b6ff00");
+    drawSeries("playerScore", "#ffffff");
+    drawSeries("aiScore", "#c7ff4d");
+
+    // X-axis match labels.
+    chartCtx.fillStyle = "#999999";
+    chartCtx.textAlign = "center";
+    chartCtx.font = "12px Courier New, monospace";
+    const labelCount = Math.min(history.length, 8);
+    for (let i = 0; i < labelCount; i++) {
+        const index = labelCount === 1
+            ? 0
+            : Math.round(i * (history.length - 1) / (labelCount - 1));
+        chartCtx.fillText(`M${index + 1}`, xFor(index), height - 27);
+    }
+
+    // Legend.
+    chartCtx.textAlign = "left";
+    chartCtx.font = "bold 13px Courier New, monospace";
+    chartCtx.fillStyle = "#ffffff";
+    chartCtx.fillText("PLAYER", padding.left, 14);
+    chartCtx.fillStyle = "#c7ff4d";
+    chartCtx.fillText("AI", padding.left + 95, 14);
+}
+
+function renderChartWhenVisible() {
+    // Canvas dimensions/layout are unreliable while its parent is display:none.
+    requestAnimationFrame(() => {
+        drawChart();
+        requestAnimationFrame(drawChart);
+    });
 }
 
 function setupChartHover() {
@@ -1339,40 +1390,36 @@ function setupChartHover() {
 
     ui.chart.addEventListener("mousemove", event => {
         const history = statistics.history;
-
         if (!history.length) return;
 
         const rect = ui.chart.getBoundingClientRect();
+        if (!rect.width) return;
 
-        const ratio =
-            (event.clientX - rect.left) / rect.width;
-
-        const index = Math.max(
-            0,
-            Math.min(
-                history.length - 1,
-                Math.round(ratio * (history.length - 1))
-            )
-        );
-
+        const ratio = Math.max(0, Math.min(1,
+            (event.clientX - rect.left) / rect.width
+        ));
+        const index = Math.max(0, Math.min(
+            history.length - 1,
+            Math.round(ratio * (history.length - 1))
+        ));
         const item = history[index];
 
         ui.tooltip.textContent =
-            `Player: ${item.playerScore} | ` +
-            `AI: ${item.aiScore} | ` +
-            `AI Level: ${item.aiLevel}`;
-
+            `Match ${index + 1} | Player: ${item.playerScore} | ` +
+            `AI: ${item.aiScore} | AI Level: ${item.aiLevel}`;
         ui.tooltip.style.display = "block";
-
-        ui.tooltip.style.left =
-            `${event.clientX - rect.left + 10}px`;
-
-        ui.tooltip.style.top =
-            `${event.clientY - rect.top + 10}px`;
+        ui.tooltip.style.left = `${event.offsetX + 12}px`;
+        ui.tooltip.style.top = `${event.offsetY + 12}px`;
     });
 
     ui.chart.addEventListener("mouseleave", () => {
         ui.tooltip.style.display = "none";
+    });
+
+    window.addEventListener("resize", () => {
+        if (ui.stats && ui.stats.style.display !== "none") {
+            renderChartWhenVisible();
+        }
     });
 }
 
@@ -1413,14 +1460,14 @@ document.addEventListener("keyup", event => {
 });
 
 /* =========================================================
-   SCOREBOARD ALIGNMENT
+   BUTTONS
    ========================================================= */
 
 function configureScoreboard() {
     const scoreboard = document.querySelector(".scoreboard");
-
     if (!scoreboard) return;
 
+    // Keep both scores in one centered horizontal row on every screen size.
     Object.assign(scoreboard.style, {
         width: "100%",
         boxSizing: "border-box",
@@ -1458,9 +1505,65 @@ function configureScoreboard() {
     });
 }
 
-/* =========================================================
-   BUTTONS
-   ========================================================= */
+async function resetAIProgress() {
+    if (running) {
+        alert("End the current match before resetting AI learning.");
+        return;
+    }
+
+    const confirmed = confirm(
+        "Reset AI learning progress?\n\n" +
+        "This resets AI level, growth, saved model weights, and learning counters.\n" +
+        "Match history and statistics will remain."
+    );
+    if (!confirmed) return;
+
+    aiAttempts = 0;
+    aiLevel = 1;
+    aiSkill = 0;
+    totalUpdates = 0;
+    totalExperiences = 0;
+    lastAIState = null;
+    lastAIAction = 1;
+    moveAI.frame = 0;
+    moveAI.cachedTargetX = CONFIG.width / 2;
+
+    storageSet(STORAGE.attempts, "0");
+
+    try {
+        localStorage.removeItem(STORAGE.model);
+    } catch (error) {
+        console.warn("Could not remove saved AI model:", error);
+    }
+
+    if (agent) {
+        try {
+            if (agent.model) agent.model.dispose();
+            if (agent.targetModel) agent.targetModel.dispose();
+        } catch (error) {
+            console.warn("Could not dispose old AI model:", error);
+        }
+    }
+
+    agent = null;
+    trainingInProgress = false;
+    trainingQueued = false;
+    updateAISkill();
+    updateUI();
+
+    if (ui.modelStatus) {
+        ui.modelStatus.textContent = window.tf
+            ? "RESETTING AI MODEL..."
+            : "BASIC AI MODE";
+    }
+
+    if (window.tf) {
+        await initializeAI();
+    }
+
+    updateUI();
+    alert("AI learning progress has been reset. Match history was preserved.");
+}
 
 function setupButtons() {
     if (ui.play) {
@@ -1475,7 +1578,7 @@ function setupButtons() {
         ui.statsButton.addEventListener("click", () => {
             showScreen("stats");
             updateUI();
-            drawChart();
+            renderChartWhenVisible();
         });
     }
 
@@ -1520,8 +1623,12 @@ function setupButtons() {
 
             saveStatistics();
             updateUI();
-            drawChart();
+            renderChartWhenVisible();
         });
+    }
+
+    if (ui.resetAIProgress) {
+        ui.resetAIProgress.addEventListener("click", resetAIProgress);
     }
 }
 
@@ -1602,11 +1709,13 @@ async function init() {
         setupButtons();
         setupChartHover();
 
+        // Display menu immediately.
         showScreen("menu");
 
         updateUI();
-        drawChart();
+        renderChartWhenVisible();
 
+        // AI loads independently of the game.
         initializeAI().catch(error => {
             console.error("AI startup error:", error);
         });
@@ -1614,7 +1723,6 @@ async function init() {
         console.log("Pong AI initialized.");
         console.log("AI attempts:", aiAttempts);
         console.log("AI level:", aiLevel);
-
         console.log(
             "Prediction error rate:",
             getAIErrorRate()
