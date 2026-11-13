@@ -1,410 +1,220 @@
 
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
-
-    <meta
-        name="viewport"
-        content="width=device-width, initial-scale=1.0"
-    >
-
-    <meta
-        name="theme-color"
-        content="#050505"
-    >
-
-    <meta
-        name="description"
-        content="PONG AI - Deep Reinforcement Learning Arcade Game"
-    >
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#050505">
+    <meta name="description" content="PONG AI - Deep Reinforcement Learning Arcade Game">
 
     <title>PONG AI | Classic Arcade</title>
 
-    <!-- CLASSIC ARCADE CSS -->
-    <link rel="stylesheet" href="./style.css?v=3">
+    <link rel="stylesheet" href="./style.css?v=4">
 
-    <!-- TENSORFLOW.JS -->
     <script
         src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js"
         defer>
     </script>
 
-    <!-- GAME LOGIC -->
-    <script src="./game.js" defer></script>
-
+    <script src="./game.js?v=4" defer></script>
 </head>
 
 <body>
 
-    <!-- ================================================= -->
     <!-- MAIN MENU -->
-    <!-- ================================================= -->
-
     <section id="menuScreen" class="screen">
-
         <div class="menu-container">
 
-            <!-- GAME TITLE -->
-
             <div class="logo">
-
-                <span class="logo-small">
-                    NEURAL ARCADE
-                </span>
-
-                <h1>
-                    PONG<span>AI</span>
-                </h1>
-
-                <p>
-                    DEEP REINFORCEMENT LEARNING
-                </p>
-
+                <span class="logo-small">NEURAL ARCADE</span>
+                <h1>PONG<span>AI</span></h1>
+                <p>DEEP REINFORCEMENT LEARNING</p>
             </div>
 
-            <!-- MAIN MENU BUTTONS -->
-
             <div class="menu-buttons">
-
-                <button
-                    id="playBtn"
-                    class="main-btn"
-                    type="button"
-                >
+                <button id="playBtn" class="main-btn" type="button">
                     PLAY
                 </button>
 
-                <button
-                    id="statsBtn"
-                    class="secondary-btn"
-                    type="button"
-                >
+                <button id="statsBtn" class="secondary-btn" type="button">
                     STATISTICS
                 </button>
-
             </div>
-
-            <!-- AI MODEL STATUS -->
 
             <div class="model-information">
-
                 <span class="status-indicator"></span>
-
-                <span id="modelStatus">
-                    INITIALIZING AI...
-                </span>
-
+                <span id="modelStatus">INITIALIZING AI...</span>
             </div>
 
-            <!-- CONTROLS -->
-
             <div class="controls-information">
-
                 <p>CONTROLS</p>
-
                 <span>← → ARROW KEYS</span>
-
                 <span>OR A / D</span>
-
                 <span>SPACE TO PAUSE</span>
-
             </div>
 
         </div>
-
     </section>
 
-    <!-- ================================================= -->
-    <!-- GAME SCREEN -->
-    <!-- ================================================= -->
 
+    <!-- GAME SCREEN -->
     <section id="gameScreen" class="screen hidden">
 
-        <!-- GAME HEADER -->
-
         <header class="game-header">
-
             <div class="game-title">
-
-                <span class="header-label">
-                    NEURAL ARCADE
-                </span>
-
-                <h2>
-                    PONG AI
-                </h2>
-
+                <span class="header-label">NEURAL ARCADE</span>
+                <h2>PONG AI</h2>
             </div>
-
-            <!-- LIVE STATISTICS -->
 
             <div class="live-statistics">
-
                 <div class="live-stat">
-
-                    <span>DEFENSE RATE</span>
-
-                    <strong id="liveRate">
-                        0%
-                    </strong>
-
+                    <span>AI SCORE RATE</span>
+                    <strong id="liveRate">0%</strong>
                 </div>
 
                 <div class="live-stat">
-
                     <span>DQN UPDATES</span>
-
-                    <strong id="liveUpdates">
-                        0
-                    </strong>
-
+                    <strong id="liveUpdates">0</strong>
                 </div>
 
                 <div class="live-stat">
-
                     <span>SPEED</span>
-
-                    <strong id="liveSpeed">
-                        NORMAL
-                    </strong>
-
+                    <strong id="liveSpeed">NORMAL</strong>
                 </div>
-
             </div>
-
         </header>
 
-        <!-- GAME ARENA -->
-
         <main class="arena-container">
-
             <canvas
                 id="arena"
                 width="900"
                 height="620"
-                aria-label="Pong AI game arena"
-            >
+                aria-label="Pong AI game arena">
             </canvas>
-
         </main>
 
-        <!-- GAME CONTROLS -->
-
         <div class="game-controls">
-
-            <button
-                id="pauseBtn"
-                class="secondary-btn"
-                type="button"
-            >
+            <button id="pauseBtn" class="secondary-btn" type="button">
                 PAUSE
             </button>
 
-            <button
-                id="newMatchBtn"
-                class="secondary-btn"
-                type="button"
-            >
+            <button id="newMatchBtn" class="secondary-btn" type="button">
                 NEW MATCH
             </button>
 
-            <button
-                id="endMatchBtn"
-                class="danger-btn"
-                type="button"
-            >
+            <button id="endMatchBtn" class="danger-btn" type="button">
                 END MATCH
             </button>
-
         </div>
 
-        <!-- PAUSE OVERLAY -->
-
-        <div
-            id="pauseOverlay"
-            class="overlay hidden"
-        >
-
+        <div id="pauseOverlay" class="overlay hidden">
             <div class="overlay-content">
-
                 <h2>PAUSED</h2>
+                <p>GAME TEMPORARILY STOPPED</p>
 
-                <p>
-                    GAME TEMPORARILY STOPPED
-                </p>
-
-                <button
-                    id="resumeBtn"
-                    class="main-btn"
-                    type="button"
-                >
+                <button id="resumeBtn" class="main-btn" type="button">
                     RESUME
                 </button>
 
-                <button
-                    id="gameMenuBtn"
-                    class="secondary-btn"
-                    type="button"
-                >
+                <button id="gameMenuBtn" class="secondary-btn" type="button">
                     MAIN MENU
                 </button>
-
             </div>
-
         </div>
 
     </section>
 
-    <!-- ================================================= -->
+
     <!-- STATISTICS SCREEN -->
-    <!-- ================================================= -->
-
     <section id="statsScreen" class="screen hidden">
-
         <div class="stats-container">
 
-            <!-- STATISTICS HEADER -->
-
             <header class="stats-header">
-
                 <div>
-
-                    <span class="header-label">
-                        NEURAL ARCADE
-                    </span>
-
-                    <h1>
-                        STATISTICS
-                    </h1>
-
+                    <span class="header-label">NEURAL ARCADE</span>
+                    <h1>STATISTICS</h1>
                 </div>
 
-                <button
-                    id="statsBackBtn"
-                    class="secondary-btn"
-                    type="button"
-                >
+                <button id="statsBackBtn" class="secondary-btn" type="button">
                     BACK
                 </button>
-
             </header>
 
-            <!-- STATISTICS CARDS -->
 
+            <!-- STATISTICS CARDS -->
             <div class="stats-grid">
 
                 <div class="stat-card">
-
                     <span>TOTAL MATCHES</span>
-
-                    <strong id="statMatches">
-                        0
-                    </strong>
-
+                    <strong id="statMatches">0</strong>
                 </div>
 
                 <div class="stat-card">
-
-                    <span>DEFENSE RATE</span>
-
-                    <strong id="statRate">
-                        0%
-                    </strong>
-
+                    <span>AI SCORE RATE</span>
+                    <strong id="statRate">0%</strong>
                 </div>
 
                 <div class="stat-card">
-
                     <span>TOTAL PLAY TIME</span>
-
-                    <strong id="statTime">
-                        0m 0s
-                    </strong>
-
+                    <strong id="statTime">0m 0s</strong>
                 </div>
 
                 <div class="stat-card">
-
                     <span>DQN UPDATES</span>
-
-                    <strong id="statUpdates">
-                        0
-                    </strong>
-
+                    <strong id="statUpdates">0</strong>
                 </div>
 
                 <div class="stat-card">
-
                     <span>EXPERIENCES</span>
-
-                    <strong id="statExperiences">
-                        0
-                    </strong>
-
+                    <strong id="statExperiences">0</strong>
                 </div>
 
                 <div class="stat-card">
-
                     <span>EPSILON</span>
-
-                    <strong id="statEpsilon">
-                        1.000
-                    </strong>
-
+                    <strong id="statEpsilon">0.250</strong>
                 </div>
 
             </div>
 
-            <!-- MATCH PERFORMANCE GRAPH -->
 
+            <!-- PERFORMANCE GRAPH -->
             <div class="chart-container">
 
                 <div class="chart-header">
-
-                    <h2>
-                        MATCH PERFORMANCE
-                    </h2>
+                    <h2>MATCH PERFORMANCE</h2>
 
                     <div class="chart-legend">
-
-                        <span class="player-legend">
-                            PLAYER
-                        </span>
-
-                        <span class="ai-legend">
-                            AI
-                        </span>
-
+                        <span class="player-legend">PLAYER</span>
+                        <span class="ai-legend">AI</span>
                     </div>
-
                 </div>
 
                 <canvas
                     id="statsChart"
                     width="800"
                     height="300"
-                    aria-label="Match performance chart"
-                >
+                    aria-label="Match performance chart">
                 </canvas>
+
+                <!-- HOVER TOOLTIP -->
+                <div
+                    id="chartTooltip"
+                    class="chart-tooltip hidden"
+                    role="status">
+                </div>
 
             </div>
 
-            <!-- RESET STATISTICS -->
 
             <button
                 id="resetStatsBtn"
                 class="danger-btn"
-                type="button"
-            >
+                type="button">
                 RESET STATISTICS
             </button>
 
         </div>
-
     </section>
 
 </body>
-
 </html>
